@@ -1,0 +1,5 @@
+node_modules/
+# las matrículas reales no entran nunca: se trabajan fuera del repositorio
+datos-reales/
+*-real.*
+*.docx

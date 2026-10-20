@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lector de matrículas</title>
+<meta name="description" content="Lee matrículas del Registro General de la Provincia de Córdoba en PDF y devuelve la descripción del inmueble, fiel y en letras, lista para pegar en Word.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='3' width='22' height='26' rx='3' fill='%23345'/%3E%3Cpath d='M10 10h12M10 15h12M10 20h8' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+ --bg:#f6f5f2; --card:#ffffff; --fg:#1d2329; --muted:#5d6670; --line:#dcd9d2; --soft:#efede8;
+ --accent:#2f4f6f; --accent-fg:#ffffff; --bad:#b0301f; --bad-bg:#fbeeeb; --ok:#256b3a; --ok-bg:#eaf5ed;
+ --warn:#8a5a00; --focus:#3b6ea5;
+ color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+ :root:not([data-theme="light"]){
+  --bg:#15191d; --card:#1e2328; --fg:#e7e9eb; --muted:#9aa3ad; --line:#353c44; --soft:#262c32;
+  --accent:#8fb3d9; --accent-fg:#10161c; --bad:#f08a7a; --bad-bg:#3a2320; --ok:#7fcf95; --ok-bg:#1d3326;
+  --warn:#e6b65c; --focus:#8fb3d9;
+  color-scheme:dark;
+ }
+}
+:root[data-theme="dark"]{
+ --bg:#15191d; --card:#1e2328; --fg:#e7e9eb; --muted:#9aa3ad; --line:#353c44; --soft:#262c32;
+ --accent:#8fb3d9; --accent-fg:#10161c; --bad:#f08a7a; --bad-bg:#3a2320; --ok:#7fcf95; --ok-bg:#1d3326;
+ --warn:#e6b65c; --focus:#8fb3d9;
+ color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.envoltura{max-width:1500px;margin:0 auto;padding:20px 16px 40px}
+header h1{margin:0;font-size:1.6rem;letter-spacing:-.01em}
+header p{margin:.25rem 0 0;color:var(--muted)}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:.45rem .9rem}
+button:hover{border-color:var(--accent)}
+button.primario{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button.hecho{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+button.fallo{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.5;cursor:default}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.caja{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px}
+details.clave summary{cursor:pointer;font-weight:600}
+.clave .fila{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.clave input{flex:1 1 260px;min-width:0;font:inherit;padding:.45rem .6rem;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.nota{color:var(--muted);font-size:.9rem;margin:.4rem 0 0}
+.soltar{margin-top:16px;border:2px dashed var(--line);border-radius:14px;padding:28px 16px;text-align:center;background:var(--card);cursor:pointer}
+.soltar.encima{border-color:var(--accent);background:var(--soft)}
+.soltar strong{font-size:1.1rem}
+.soltar .nota{max-width:640px;margin:.6rem auto 0}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px}
+.estado{color:var(--accent);font-weight:600;font-size:.95rem;margin:10px 2px 0;min-height:1.5em;overflow-wrap:anywhere}
+.cuerpo{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:12px}
+@media (min-width:1100px){ .cuerpo.con-visor{grid-template-columns:minmax(0,1fr) minmax(0,46%)} }
+.visor{display:none}
+@media (min-width:1100px){
+ .con-visor .visor{display:flex;flex-direction:column;position:sticky;top:12px;height:calc(100vh - 24px);background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+}
+.visor .tit{padding:8px 12px;border-bottom:1px solid var(--line);font-size:.9rem;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.visor iframe{flex:1;border:0;width:100%;background:#888}
+.archivo{margin-top:4px}
+.archivo>.cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:.92rem;margin:12px 2px 6px}
+.archivo>.cab b{color:var(--fg);word-break:break-all}
+.archivo>.cab button{margin-left:auto}
+.leyendo{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.error{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad);border-radius:12px;padding:12px 14px;overflow-wrap:anywhere}
+.error button{margin-top:8px}
+.detalle{display:block;font-size:.8rem;opacity:.85;margin-top:4px}
+.mat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.mat.activa{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mat h2{font-size:1.15rem;margin:0}
+.mat .sub{color:var(--muted);font-size:.88rem;margin:.15rem 0 .4rem;word-break:break-word}
+.avisos{list-style:none;padding:0;margin:.6rem 0 0}
+.avisos li{padding:6px 10px;border-radius:8px;margin-top:6px;font-size:.92rem;background:var(--bad-bg);color:var(--bad);overflow-wrap:anywhere}
+.avisos li.bien{background:var(--ok-bg);color:var(--ok)}
+.avisos li.leve{background:var(--soft);color:var(--muted)}
+.bloque{margin-top:14px}
+.bloque .rot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.bloque .rot h3{font-size:.95rem;margin:0;color:var(--accent)}
+.bloque .rot .nota{margin:0;flex:1 1 220px}
+.texto{font-family:Cambria,"Times New Roman",serif;font-size:1.02rem;line-height:1.6;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-wrap:anywhere}
+@media (min-width:700px){ .texto{text-align:justify;hyphens:auto} textarea.texto{text-align:left} }
+textarea.texto{width:100%;min-height:9rem;resize:vertical;color:var(--fg);display:block}
+.otros{margin-top:14px}
+.otros summary{cursor:pointer;color:var(--accent);font-weight:600}
+.dato{margin-top:10px}
+.dato .rot{display:flex;gap:8px;align-items:center}
+.dato .rot b{font-size:.9rem}
+.dato pre{white-space:pre-wrap;font:inherit;font-size:.92rem;margin:4px 0 0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}
+button.chico{padding:.2rem .6rem;font-size:.85rem}
+.ver{margin-left:auto}
+footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
+.oculto{display:none!important}
+</style>
+</head>
+<body>
+<div class="envoltura">
+<header>
+ <h1>Lector de matrículas</h1>
+ <p>Arrastrás el PDF de la matrícula y sale la descripción del inmueble, fiel y en letras, lista para pegar en Word.</p>
+</header>
+
+<details class="caja clave" id="cajaClave">
+ <summary id="resumenClave">Clave de la API</summary>
+ <form class="fila" id="formClave" autocomplete="off">
+  <input id="clave" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de la API de Anthropic">
+  <button id="bClave" class="primario" type="submit">Guardar</button>
+ </form>
+ <p class="nota" id="ecoClave">Se guarda sólo en esta computadora, en este navegador.</p>
+</details>
+
+<div class="soltar" id="soltar" role="button" tabindex="0" aria-label="Elegir los PDF de las matrículas">
+ <strong>Arrastrá acá los PDF de las matrículas</strong><br>
+ <span>o tocá para elegirlos. Pueden ser varios, y un PDF puede traer varias matrículas.</span>
+ <p class="nota">Los PDF se mandan a Anthropic para leerlos, y cada lectura se cobra: unos centavos de dólar por matrícula. Lo que lee la máquina hay que compararlo con la matrícula.</p>
+ <input id="archivos" type="file" accept="application/pdf,.pdf" multiple hidden>
+</div>
+
+<p class="estado" id="estado" role="status" aria-live="polite"></p>
+
+<div class="barra oculto" id="barra">
+ <button id="bTodasLetras" class="primario">Copiar todas en letras</button>
+ <button id="bTodasFiel">Copiar todas fieles</button>
+ <button id="bLimpiar">Empezar de nuevo</button>
+</div>
+
+<div class="cuerpo" id="cuerpo">
+ <main id="lista"></main>
+ <aside class="visor" id="visor" aria-label="La matrícula en PDF">
+  <div class="tit"><span id="visorTit">La matrícula</span><a id="visorAfuera" href="#" target="_blank" rel="noopener">Abrir aparte</a></div>
+  <iframe id="visorPdf" title="La matrícula en PDF"></iframe>
+ </aside>
+</div>
+
+<footer>Versión del 20/10/2026 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
+</div>
+
+<script src="motor.js"></script>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ════════════ la clave ════════════ */
+/* Va guardada en el navegador de quien la usa y en ningún otro lado: esta página es pública
+   y su código también. */
+const CLAVE_KEY="lector_matriculas_clave";
+function leerClave(){ try{ return localStorage.getItem(CLAVE_KEY)||""; }catch(e){ return ""; } }
+function guardarClave(v){ try{ v?localStorage.setItem(CLAVE_KEY,v):localStorage.removeItem(CLAVE_KEY); return true; }catch(e){ return false; } }
+function pintarClave(){
+ const hay=!!leerClave();
+ $("#resumenClave").textContent=hay?"Clave de la API: guardada":"Clave de la API: falta cargarla";
+ $("#cajaClave").open=!hay;
+}
+$("#formClave").addEventListener("submit",e=>{
+ e.preventDefault();
+ const v=$("#clave").value.trim();
+ if(!v){ $("#ecoClave").textContent="Pegá la clave en el campo y tocá «Guardar»."; return; }
+ if(!guardarClave(v)){ $("#ecoClave").textContent="Este navegador no deja guardar datos: la clave no quedó guardada."; return; }
+ $("#clave").value="";
+ $("#ecoClave").textContent="Guardada en esta computadora. Ya podés arrastrar los PDF.";
+ pintarClave();
+ $("#resumenClave").focus();
+ estado("Clave guardada. Ya podés arrastrar los PDF.");
+});
+
+/* ════════════ la lectura: la API de Anthropic ════════════ */
+/* El PDF va entero, como documento: la API lee cada hoja como imagen y como texto, así que
+   sirve igual si es un escaneo. La respuesta viene en un formato fijo (JSON con esquema), y
+   en streaming, para ir mostrando cuántas matrículas van y para que una tanda larga no corte
+   la conexión. */
+const API_URL="https://api.anthropic.com/v1/messages";
+const MODELO="claude-opus-5-5";
+/* dólares por millón de tokens, de la página de precios; si sirve otro modelo (el respaldo)
+   se cobra a su tarifa, y uno que no esté en la tabla se cuenta a la más cara */
+const PRECIOS={"claude-opus-5-5":[4,20],"claude-opus-5":[5,25],"claude-opus-4-8":[5,25],"claude-opus-4-7":[5,25],"claude-sonnet-5-5":[2,10],"claude-sonnet-5":[2,10]};
+const precioDe=m=>{ const k=Object.keys(PRECIOS).find(x=>String(m||"").startsWith(x)); return k?PRECIOS[k]:[10,50]; };
+const PROMPT=`Vas a leer matrículas del Registro General de la Provincia de Córdoba (folio real) que vienen en un PDF, casi siempre escaneado. Una escribana va a usar lo que transcribas en una escritura, así que lo que importa es la exactitud, sobre todo en los números.
+
+Cómo es el documento:
+- Cada matrícula es un formulario con campos numerados: 1-MATRÍCULA, 2-DEPARTAMENTO, 3-CUENTA, 4-NOMENCLATURA, 5-DESCRIPCIÓN DEL INMUEBLE, 6-ANTECEDENTE DOMINIAL, 7-PLANO, y abajo las columnas a) Titulares sobre el dominio, b) Gravámenes, restricciones y otros derechos reales, c) Cancelaciones, d) Certificaciones.
+- Un PDF puede traer varias matrículas, una detrás de otra. Una matrícula puede seguir en las hojas siguientes (un ANEXO, o el dorso): lo que sigue en un anexo es parte de la misma matrícula. Las hojas en blanco y los dorsos sin texto no cuentan.
+- Las hojas pueden estar escaneadas giradas.
+- El papel puede tener marcas a mano —subrayados, rayas, tildes— de quien lo leyó. No son parte del texto: transcribí lo impreso. Si una marca tapa un número o una letra, decilo en «dudas».
+- El texto impreso rellena los renglones con barras (////). Podés omitirlas.
+
+Cómo transcribir:
+- Literal. No corrijas la ortografía, la redacción ni la puntuación: aunque haya un error evidente, una palabra mal escrita o un número que no coincide con otro, copialo como está.
+- Los números como están, en cifras, con sus puntos y sus comas.
+- En la descripción respetá los cortes de renglón del original.
+- Donde no se lea, escribí [ilegible]. No completes ni adivines.
+- Si un campo no existe o está vacío, devolvelo vacío.
+
+Los campos:
+- numero: el número de la matrícula (campo 1).
+- pagina: la hoja del PDF donde empieza esa matrícula; la primera hoja es 1.
+- cuenta, nomenclatura, antecedente, plano: como figuran. En la nomenclatura poné si es UR o RU y los rótulos con sus valores (D:, Ped:, Hoja:, P:, y los que haya).
+- descripcion: el campo 5 entero, sin el rótulo.
+- titulares: la columna a) entera, con la proporción de cada titular si figura.
+- gravamenes: la columna b) entera.
+- dudas: cada lugar donde no estés seguro de lo que leíste: el texto en cuestión y por qué (una marca a mano lo tapa, está borroso, se corta). Vacía si no hay.`;
+const ESQUEMA={
+ type:"object", additionalProperties:false, required:["matriculas"],
+ properties:{ matriculas:{ type:"array", items:{
+  type:"object", additionalProperties:false,
+  required:["numero","pagina","cuenta","nomenclatura","descripcion","antecedente","plano","titulares","gravamenes","dudas"],
+  properties:{
+   numero:{type:"string"}, pagina:{type:"integer"}, cuenta:{type:"string"}, nomenclatura:{type:"string"},
+   descripcion:{type:"string"}, antecedente:{type:"string"}, plano:{type:"string"},
+   titulares:{type:"string"}, gravamenes:{type:"string"}, dudas:{type:"array",items:{type:"string"}}
+  }}}}
+};
+const TOPE_BASE64=30*1024*1024;   /* el pedido entero no puede pasar de 32 MB */
+
+/* Un error con un mensaje para ella, en castellano, y el original de la API aparte y chico */
+class ErrorLectura extends Error{ constructor(msg,detalle){ super(msg); this.detalle=detalle||""; } }
+const RED=/Failed to fetch|NetworkError|Load failed|network error|ERR_|terminated/i;
+function mensajeApi(status,tipo,txt){
+ if(status===401||tipo==="authentication_error") return "La clave de la API no sirve o está vencida. Cambiala arriba, en «Clave de la API».";
+ if(status===402||tipo==="billing_error") return "Hay un problema con el pago de la cuenta de Anthropic. Avisale a quien maneja la cuenta.";
+ if(status===400&&/spend|usage limit|limit.*(reached|exceeded)|credit balance|billing/i.test(txt)) return "Se llegó al límite de gasto de esta clave. Avisale a quien maneja la cuenta para que lo suba.";
+ if(status===403||tipo==="permission_error") return "La clave no tiene permiso para esto. Revisala en la consola de Anthropic.";
+ if(status===413||tipo==="request_too_large") return "El PDF es demasiado grande para leerlo de una vez. Partilo en dos.";
+ if(status===429||tipo==="rate_limit_error") return "La API recibió demasiados pedidos seguidos. Esperá un minuto y probá de nuevo.";
+ if(status===529||tipo==="overloaded_error") return "La API está saturada en este momento. Probá de nuevo en unos minutos.";
+ if(status>=500||tipo==="api_error") return "La API tuvo un problema de su lado. Probá de nuevo en unos minutos.";
+ return "La API no aceptó el pedido. Probá de nuevo; si sigue pasando, avisale a quien maneja la cuenta.";
+}
+function aBase64(blob){
+ return new Promise((res,rej)=>{
+  const r=new FileReader();
+  r.onload=()=>res(String(r.result).split(",")[1]||"");
+  r.onerror=()=>rej(new ErrorLectura("No se pudo abrir el archivo."));
+  r.readAsDataURL(blob);
+ });
+}
+async function pedir(clave,b64,conRespaldo,signal){
+ const headers={
+  "content-type":"application/json",
+  "x-api-key":clave,
+  "anthropic-version":"2023-06-01",
+  "anthropic-dangerous-direct-browser-access":"true"
+ };
+ const cuerpo={
+  model:MODELO, max_tokens:64000, stream:true,
+  output_config:{effort:"medium", format:{type:"json_schema", schema:ESQUEMA}},
+  system:PROMPT,
+  messages:[{role:"user",content:[
+   {type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},
+   {type:"text",text:"Transcribí las matrículas de este PDF."}
+  ]}]
+ };
+ /* si el modelo se niega a leer, la API lo reintenta sola con otro modelo */
+ if(conRespaldo){ headers["anthropic-beta"]="server-side-fallback-2026-07-01"; cuerpo.fallbacks="default"; }
+ return fetch(API_URL,{method:"POST",headers,body:JSON.stringify(cuerpo),signal});
+}
+async function leerPdf(archivo,alAvanzar,signal){
+ const clave=leerClave();
+ if(!clave) throw new ErrorLectura("Falta la clave de la API. Cargala arriba, en «Clave de la API».");
+ const b64=await aBase64(archivo.blob);
+ if(b64.length>TOPE_BASE64) throw new ErrorLectura("El PDF es demasiado grande para leerlo de una vez (el tope es de unos 22 MB). Partilo en dos.");
+ let r=await pedir(clave,b64,true,signal);
+ if(r.status===400){
+  /* el respaldo es una función nueva de la API: si la rechaza, se lee sin respaldo */
+  let txt=""; try{ txt=await r.clone().text(); }catch(e){}
+  if(/fallback|anthropic-beta|beta/i.test(txt)) r=await pedir(clave,b64,false,signal);
+ }
+ if(!r.ok){
+  let tipo="", txt="";
+  try{ const j=await r.json(); tipo=j&&j.error&&j.error.type||""; txt=j&&j.error&&j.error.message||""; }catch(e){}
+  throw new ErrorLectura(mensajeApi(r.status,tipo,txt),"La API contestó "+r.status+(txt?": "+txt:""));
+ }
+ /* el streaming: eventos «event: …» / «data: {…}» separados por una línea en blanco. Si el
+    modelo se niega a mitad y entra el respaldo, el respaldo SIGUE desde donde quedó (así lo
+    dice la documentación): se sigue juntando el texto, no se tira lo anterior. */
+ const lector=r.body.getReader(), dec=new TextDecoder();
+ let buf="", json="", desdeRespaldo=-1, parada=null, contadas=0;
+ const uso={entrada:0,salida:0,modelo:MODELO,iteraciones:null};
+ const evento=raw=>{
+  const datos=raw.split("\n").filter(l=>l.startsWith("data:")).map(l=>l.slice(5).replace(/^ /,"")).join("\n");
+  if(!datos) return;
+  let d; try{ d=JSON.parse(datos); }catch(e){ return; }
+  if(d.type==="message_start"&&d.message){
+   const u=d.message.usage||{};
+   uso.entrada=(u.input_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0);
+   if(d.message.model) uso.modelo=d.message.model;
+  }else if(d.type==="content_block_start"&&d.content_block&&d.content_block.type==="fallback"){
+   desdeRespaldo=json.length;
+  }else if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){
+   json+=d.delta.text;
+   const n=(json.match(/"numero"\s*:/g)||[]).length;
+   if(n!==contadas){ contadas=n; alAvanzar(n); }
+  }else if(d.type==="message_delta"){
+   if(d.delta&&d.delta.stop_reason) parada=d.delta.stop_reason;
+   if(d.usage){ if(d.usage.output_tokens) uso.salida=d.usage.output_tokens; if(Array.isArray(d.usage.iterations)) uso.iteraciones=d.usage.iterations; }
+  }else if(d.type==="error"){
+   const t=d.error&&d.error.type||"";
+   throw new ErrorLectura(mensajeApi(0,t,""),"La API cortó la lectura"+(d.error&&d.error.message?": "+d.error.message:""));
+  }
+ };
+ try{
+  for(;;){
+   const {value,done}=await lector.read();
+   if(done) break;
+   buf+=dec.decode(value,{stream:true}).replace(/\r\n?/g,"\n");
+   let k;
+   while((k=buf.indexOf("\n\n"))>=0){ evento(buf.slice(0,k)); buf=buf.slice(k+2); }
+  }
+  buf+=dec.decode();
+ }catch(e){
+  if(e instanceof ErrorLectura||e.name==="AbortError") throw e;
+  throw new ErrorLectura("Se cortó la conexión mientras leía. Probá de nuevo.",String(e&&e.message||e));
+ }
+ if(buf.trim()) evento(buf.replace(/\r\n?/g,"\n"));
+ if(parada==="refusal") throw new ErrorLectura("La lectura no se completó: el modelo no quiso leer este PDF.");
+ if(parada==="max_tokens") throw new ErrorLectura("El PDF trae demasiadas matrículas para una sola lectura. Partilo en partes más chicas.");
+ let datos=null;
+ for(const intento of [json, desdeRespaldo>=0?json.slice(desdeRespaldo):null]){
+  if(intento==null) continue;
+  try{ datos=JSON.parse(intento); break; }catch(e){}
+ }
+ if(!datos) throw new ErrorLectura("La respuesta llegó incompleta. Probá de nuevo.");
+ const lista=Array.isArray(datos.matriculas)?datos.matriculas:[];
+ if(!lista.length) throw new ErrorLectura("No encontré ninguna matrícula en este PDF.");
+ let costo=0;
+ if(uso.iteraciones&&uso.iteraciones.length){
+  for(const it of uso.iteraciones){
+   const [pe,ps]=precioDe(it.model||uso.modelo);
+   costo+=((it.input_tokens||0)+(it.cache_creation_input_tokens||0)+(it.cache_read_input_tokens||0))*pe/1e6+(it.output_tokens||0)*ps/1e6;
+  }
+ }else{ const [pe,ps]=precioDe(uso.modelo); costo=uso.entrada*pe/1e6+uso.salida*ps/1e6; }
+ return {matriculas:lista, costo};
+}
+
+/* ════════════ el estado ════════════ */
+/* archivos: lo que se arrastró. matriculas: lo que salió de cada uno. Lo que se ve es
+   siempre derivado de acá; la descripción fiel es lo único que se edita a mano. Una matrícula
+   cuenta sólo si su archivo sigue en la lista: lo que vuelve de un archivo quitado se tira. */
+let ARCHIVOS=[], MATS=[], ACTIVA=null;
+const urls=new Map();
+const nuevoId=()=>Math.random().toString(36).slice(2,10);
+const vivas=()=>{ const ids=new Set(ARCHIVOS.map(a=>a.id)); return MATS.filter(m=>ids.has(m.archivoId)); };
+function urlDe(arch){
+ if(!arch||!arch.blob) return "";
+ if(!urls.has(arch.id)) urls.set(arch.id,URL.createObjectURL(arch.blob));
+ return urls.get(arch.id);
+}
+function soltarUrl(id){ if(urls.has(id)){ URL.revokeObjectURL(urls.get(id)); urls.delete(id); } }
+
+/* ════════════ guardar la última tanda ════════════ */
+/* Sólo la última, en este navegador: si se cierra sin querer, vuelve. No se va juntando una
+   lista con datos de terceros. Los PDF van también, para poder verlos al lado; uno que se
+   estaba leyendo vuelve como interrumpido, para leerlo de nuevo con un clic. */
+const DB="lector-matriculas", ALM="tanda";
+function abrirDb(){
+ return new Promise((res,rej)=>{
+  let q; try{ q=indexedDB.open(DB,1); }catch(e){ rej(e); return; }
+  q.onupgradeneeded=()=>q.result.createObjectStore(ALM);
+  q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);
+ });
+}
+let tGuardar=null;
+/* al escribir se espera un poco para no guardar en cada tecla; al borrar, se guarda ya */
+function guardar(ya){
+ clearTimeout(tGuardar);
+ tGuardar=setTimeout(async()=>{
+  try{
+   const db=await abrirDb();
+   const tx=db.transaction(ALM,"readwrite");
+   const archivos=ARCHIVOS.map(a=>({id:a.id,nombre:a.nombre,huella:a.huella,blob:a.blob,costo:a.costo||0,
+    estado:a.estado==="leyendo"?"error":a.estado,
+    error:a.estado==="leyendo"?"La lectura se interrumpió al cerrar o recargar la página.":a.error||"", detalle:a.detalle||""}));
+   if(archivos.length) tx.objectStore(ALM).put({archivos,matriculas:vivas()},"ultima");
+   else tx.objectStore(ALM).delete("ultima");
+   tx.oncomplete=()=>db.close();
+  }catch(e){}
+ },ya?0:300);
+}
+async function recuperar(){
+ try{
+  const db=await abrirDb();
+  const v=await new Promise((res,rej)=>{
+   const q=db.transaction(ALM).objectStore(ALM).get("ultima");
+   q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);
+  });
+  db.close();
+  if(v&&Array.isArray(v.archivos)&&v.archivos.length&&!ARCHIVOS.length){
+   ARCHIVOS=v.archivos; MATS=Array.isArray(v.matriculas)?v.matriculas:[]; MATS=vivas();
+   pintarTodo();
+   const cortadas=ARCHIVOS.filter(a=>a.estado==="error").length;
+   estado("Se recuperó la última tanda."+(cortadas?" "+(cortadas===1?"Un PDF quedó sin leer":cortadas+" PDF quedaron sin leer")+": tocá «Probar de nuevo».":""));
+  }
+ }catch(e){}
+}
+
+/* ════════════ la pantalla ════════════ */
+let tEstado=null;
+function estado(t){
+ $("#estado").textContent=t;
+ clearTimeout(tEstado);
+ if(t) tEstado=setTimeout(()=>{ $("#estado").textContent=""; },8000);
+}
+const titulo=m=>{
+ const hp=/hoja\s*:?\s*(\d+)\s*p\s*:?\s*(\d+)/i.exec(m.nomenclatura||"");
+ return "Matrícula "+(m.numero||"sin número")+(hp?" · Lote "+hp[1]+"-"+hp[2]:"");
+};
+function html(tr){
+ return tr.map(x=>{ let h=esc(x.t); if(x.u) h="<u>"+h+"</u>"; if(x.b) h="<b>"+h+"</b>"; return h; }).join("");
+}
+/* los cortes de renglón se avisan mientras la fiel sea la que leyó la máquina */
+const proc=m=>procesar(m.fiel,{cortes:m.fiel===m.original?(m.cortes||[]):[]});
+function avisosHtml(m,p){
+ const li=[];
+ for(const d of (m.dudas||[])) li.push(`<li>La máquina dudó: ${esc(d)}</li>`);
+ const g=p.geometria;
+ if(g.estado==="mal") li.push(`<li><b>${esc(g.mensaje)}</b> ${g.sugerencias.length?g.sugerencias.map(esc).join(" "):"Revisá los ángulos, las medidas y la superficie contra la matrícula."}</li>`);
+ for(const a of p.avisos) li.push(`<li>${esc(a)}</li>`);
+ if(g.estado==="ok") li.push(`<li class="bien">${esc(g.mensaje)}</li>`);
+ if(g.estado==="sin") li.push(`<li class="leve">${esc(g.mensaje)}</li>`);
+ return li.join("");
+}
+const DATOS=[["cuenta","Cuenta","La cuenta copiada","Pegala"],["nomenclatura","Nomenclatura","La nomenclatura copiada","Pegala"],["antecedente","Antecedente dominial","El antecedente copiado","Pegalo"],["plano","Plano","El plano copiado","Pegalo"],["titulares","Titulares","Los titulares copiados","Pegalos"],["gravamenes","Gravámenes, restricciones y otros derechos","Los gravámenes copiados","Pegalos"]];
+function tarjeta(m){
+ const p=proc(m);
+ const tit=titulo(m);
+ const el=document.createElement("section");
+ el.className="mat"; el.id="m-"+m.id; el.dataset.id=m.id;
+ el.setAttribute("aria-label",tit);
+ el.innerHTML=`
+  <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+   <div style="flex:1 1 240px;min-width:0"><h2>${esc(tit)}</h2>
+   <div class="sub">${esc([m.cuenta&&("Cuenta "+m.cuenta),m.pagina&&("hoja "+m.pagina+" del PDF")].filter(Boolean).join(" · "))}</div></div>
+   <button class="chico ver" data-acc="ver" aria-label="Ver la matrícula en el PDF: ${esc(tit)}">Ver la matrícula</button>
+  </div>
+  <ul class="avisos" data-zona="avisos">${avisosHtml(m,p)}</ul>
+  <div class="bloque">
+   <div class="rot"><h3>En letras</h3><button class="chico" data-acc="copiarLetras" aria-label="Copiar en letras: ${esc(tit)}">Copiar</button></div>
+   <div class="texto" data-zona="letras">${html(tramos(p.letras))}</div>
+  </div>
+  <div class="bloque">
+   <div class="rot"><h3>Fiel</h3><button class="chico" data-acc="copiarFiel" aria-label="Copiar la fiel: ${esc(tit)}">Copiar</button>
+    <p class="nota">Si la máquina leyó mal algo, corregilo acá: la versión en letras se rehace sola.</p></div>
+   <textarea class="texto" data-zona="fiel" spellcheck="false" aria-label="Descripción fiel, ${esc(tit)}"></textarea>
+   <button class="chico${m.original!==m.fiel?"":" oculto"}" data-acc="restaurar" style="margin-top:6px">Volver a lo que leyó la máquina</button>
+  </div>
+  <details class="otros"><summary>Los otros datos de la matrícula</summary>
+   ${DATOS.filter(([k])=>m[k]).map(([k,r])=>`<div class="dato"><div class="rot"><b>${esc(r)}</b><button class="chico" data-acc="copiarDato" data-k="${k}" aria-label="Copiar ${esc(r.toLowerCase())}: ${esc(tit)}">Copiar</button></div><pre>${esc(m[k])}</pre></div>`).join("")||'<p class="nota">No trae otros datos.</p>'}
+  </details>`;
+ el.querySelector("textarea").value=m.fiel;
+ return el;
+}
+/* Al escribir en la fiel no se redibuja la tarjeta —se perdería el foco—: se cambian en su
+   lugar sólo la versión en letras, los avisos y el botón de volver. */
+function refrescar(el,m){
+ const p=proc(m);
+ el.querySelector('[data-zona="letras"]').innerHTML=html(tramos(p.letras));
+ el.querySelector('[data-zona="avisos"]').innerHTML=avisosHtml(m,p);
+ el.querySelector('[data-acc="restaurar"]').classList.toggle("oculto",m.original===m.fiel);
+}
+/* Las tarjetas que ya existen no se rehacen: se mueven. Así no se pierden el foco, el cursor,
+   el deshacer de la descripción ni los «otros datos» que estaban abiertos; y si lo que está
+   arriba creció, la pantalla se corre para que lo que se estaba mirando no se escape. */
+function pintarTodo(){
+ const lista=$("#lista");
+ const ae=document.activeElement;
+ const ancla=ae&&lista.contains(ae)?ae:null;
+ const arriba=ancla?ancla.getBoundingClientRect().top:0;
+ const sel=ancla&&ancla.tagName==="TEXTAREA"?[ancla.selectionStart,ancla.selectionEnd]:null;
+ const viejas=new Map([...lista.querySelectorAll(".mat")].map(e=>[e.dataset.id,e]));
+ const frag=document.createDocumentFragment();
+ const mats=vivas();
+ for(const a of ARCHIVOS){
+  const caja=document.createElement("div"); caja.className="archivo"; caja.dataset.archivo=a.id;
+  const n=mats.filter(m=>m.archivoId===a.id).length;
+  caja.innerHTML=`<div class="cab"><b>${esc(a.nombre)}</b><span>${
+   a.estado==="listo"?(n===1?"1 matrícula":n+" matrículas")+(a.costo?" · costó unos US$ "+a.costo.toFixed(2).replace(".",","):""):""}</span>${
+   a.estado==="listo"?`<button class="chico" data-quitar="${esc(a.id)}" aria-label="Quitar ${esc(a.nombre)}">Quitar</button>`:""}</div>`;
+  if(a.estado==="leyendo"){
+   const d=document.createElement("div"); d.className="leyendo"; d.dataset.prog=a.id; d.tabIndex=-1;
+   d.textContent=a.progreso||"Leyendo… puede tardar uno o dos minutos.";
+   caja.appendChild(d);
+  }else if(a.estado==="error"){
+   const d=document.createElement("div"); d.className="error"; d.setAttribute("role","alert");
+   d.innerHTML=`<b>No se pudo leer.</b> ${esc(a.error)}${a.detalle?`<span class="detalle">Detalle técnico: ${esc(a.detalle)}</span>`:""}<br><button data-reintentar="${esc(a.id)}">Probar de nuevo</button> <button data-quitar="${esc(a.id)}">Quitar</button>`;
+   caja.appendChild(d);
+  }
+  for(const m of mats.filter(m=>m.archivoId===a.id)){
+   const v=viejas.get(m.id);
+   caja.appendChild(v||tarjeta(m));
+  }
+  frag.appendChild(caja);
+ }
+ lista.replaceChildren(frag);
+ if(ancla&&document.contains(ancla)){
+  if(document.activeElement!==ancla){ ancla.focus({preventScroll:true}); if(sel) ancla.setSelectionRange(sel[0],sel[1]); }
+  const d=ancla.getBoundingClientRect().top-arriba; if(Math.abs(d)>1) window.scrollBy(0,d);
+ }
+ const hay=ARCHIVOS.length>0;
+ $("#barra").classList.toggle("oculto",!hay);
+ $("#bTodasLetras").disabled=$("#bTodasFiel").disabled=!mats.length;
+ $("#cuerpo").classList.toggle("con-visor",mats.length>0);
+ if(mats.length&&(!ACTIVA||!mats.some(m=>m.id===ACTIVA))) activar(mats[0].id,false);
+ else if(!mats.length){ ACTIVA=null; const fr=$("#visorPdf"); fr.dataset.src=""; fr.src="about:blank"; }
+ else marcarActiva();
+}
+function marcarActiva(){
+ document.querySelectorAll(".mat").forEach(e=>e.classList.toggle("activa",e.dataset.id===ACTIVA));
+}
+function activar(id,abrirSiAngosto){
+ const m=vivas().find(x=>x.id===id); if(!m) return;
+ const a=ARCHIVOS.find(x=>x.id===m.archivoId);
+ const url=urlDe(a); if(!url) return;
+ const destino=url+"#page="+(m.pagina||1);
+ if(ACTIVA!==id){ ACTIVA=id; marcarActiva(); }
+ $("#visorTit").textContent=titulo(m)+(m.pagina?" · hoja "+m.pagina:"");
+ $("#visorAfuera").href=destino;
+ const fr=$("#visorPdf");
+ /* el visor de PDF no siempre salta de hoja si sólo cambia el «#page»: se recarga */
+ if(fr.dataset.src!==destino){ fr.dataset.src=destino; fr.src="about:blank"; setTimeout(()=>{ if(fr.dataset.src===destino) fr.src=destino; },30); }
+ if(abrirSiAngosto&&!window.matchMedia("(min-width:1100px)").matches) window.open(destino,"_blank","noopener");
+}
+
+/* ════════════ copiar ════════════ */
+/* Con negrita y subrayado, y sin fuente: al pegar en Word con «Combinar formato» toma la
+   letra del documento y conserva las negritas. La confirmación aparece en el mismo botón,
+   que es donde se está mirando. */
+async function alPortapapeles(htmlTxt,plano){
+ try{
+  if(window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write){
+   await navigator.clipboard.write([new ClipboardItem({
+    "text/html":new Blob([htmlTxt],{type:"text/html"}),
+    "text/plain":new Blob([plano],{type:"text/plain"})})]);
+   return "formato";
+  }
+  throw new Error("sin ClipboardItem");
+ }catch(e){
+  try{ await navigator.clipboard.writeText(plano); return "plano"; }
+  catch(e2){
+   /* último recurso: seleccionar y copiar a la vieja usanza, sin los colores de la página */
+   const d=document.createElement("div"); d.contentEditable="true"; d.innerHTML=htmlTxt;
+   d.style.cssText="position:fixed;left:-9999px;top:0;color:#000;background:#fff;font:initial";
+   document.body.appendChild(d);
+   const r=document.createRange(); r.selectNodeContents(d);
+   const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+   let ok=false; try{ ok=document.execCommand("copy"); }catch(e3){}
+   s.removeAllRanges(); d.remove();
+   return ok?"formato":"";
+  }
+ }
+}
+async function copiar(boton,htmlTxt,plano,dicho,{negritas=true,plural=false,pegar}={}){
+ const como=await alPortapapeles(htmlTxt,plano);
+ const pegala=pegar||(plural?"Pegalas":"Pegala");
+ const msg=!como?"No se pudo copiar. Seleccioná el texto y copialo a mano."
+  :como==="plano"&&negritas?dicho+", sin formato (este navegador no copia negritas). "+pegala+" en Word."
+  :dicho+(negritas?" con las negritas":"")+". "+pegala+" en Word.";
+ estado(msg);
+ if(boton){
+  const txt=boton.dataset.txt||boton.textContent; boton.dataset.txt=txt;
+  boton.textContent=como?"Copiada ✓":"No se pudo"; boton.classList.add(como?"hecho":"fallo");
+  clearTimeout(boton._t); boton._t=setTimeout(()=>{ boton.textContent=txt; boton.classList.remove("hecho","fallo"); },2200);
+ }
+}
+const parrafo=tr=>"<p>"+html(tr)+"</p>";
+$("#lista").addEventListener("click",e=>{
+ const b=e.target.closest("button"); const card=e.target.closest(".mat");
+ if(b&&b.dataset.reintentar){ const a=ARCHIVOS.find(x=>x.id===b.dataset.reintentar); if(a) leer(a,true); return; }
+ if(b&&b.dataset.quitar){ quitar(b.dataset.quitar); return; }
+ if(!card) return;
+ const m=vivas().find(x=>x.id===card.dataset.id); if(!m) return;
+ if(!b){ if(e.target.tagName!=="TEXTAREA"&&!e.target.closest("details")) activar(m.id,false); return; }
+ const p=proc(m);
+ if(b.dataset.acc==="ver") activar(m.id,true);
+ if(b.dataset.acc==="copiarLetras") copiar(b,parrafo(tramos(p.letras)),sinMarcas(p.letras),"La descripción en letras copiada");
+ if(b.dataset.acc==="copiarFiel") copiar(b,parrafo(tramos(p.fielMarcado)),p.fiel,"La descripción fiel copiada");
+ if(b.dataset.acc==="copiarDato"){ const d=DATOS.find(x=>x[0]===b.dataset.k); const v=m[b.dataset.k]||""; copiar(b,"<p>"+esc(v).replace(/\n/g,"<br>")+"</p>",v,d?d[2]:"El dato copiado",{negritas:false,pegar:d?d[3]:"Pegalo"}); }
+ if(b.dataset.acc==="restaurar"){ m.fiel=m.original; card.querySelector("textarea").value=m.fiel; refrescar(card,m); guardar(); card.querySelector("textarea").focus(); }
+});
+/* el visor sigue a la matrícula que se está corrigiendo o copiando */
+$("#lista").addEventListener("focusin",e=>{ const card=e.target.closest(".mat"); if(card&&card.dataset.id!==ACTIVA) activar(card.dataset.id,false); });
+let tEditar=new Map();
+$("#lista").addEventListener("input",e=>{
+ if(e.target.dataset.zona!=="fiel") return;
+ const card=e.target.closest(".mat"); const m=vivas().find(x=>x.id===card.dataset.id); if(!m) return;
+ m.fiel=e.target.value;
+ clearTimeout(tEditar.get(m.id));
+ tEditar.set(m.id,setTimeout(()=>{ refrescar(card,m); guardar(); },250));
+});
+function todas(tipo,boton){
+ const mats=vivas();
+ const ps=mats.map(proc);
+ const marc=ps.map(p=>tipo==="letras"?p.letras:p.fielMarcado);
+ const faltan=ARCHIVOS.filter(a=>a.estado==="leyendo").length;
+ copiar(boton,marc.map(t=>parrafo(tramos(t))).join(""),marc.map(sinMarcas).join("\n\n"),
+  (ps.length===1?"La descripción copiada":"Las "+ps.length+" descripciones copiadas")
+  +(faltan?" (falta"+(faltan===1?" un PDF que se está":"n "+faltan+" PDF que se están")+" leyendo)":""),{plural:ps.length>1});
+}
+$("#bTodasLetras").addEventListener("click",e=>todas("letras",e.currentTarget));
+$("#bTodasFiel").addEventListener("click",e=>todas("fiel",e.currentTarget));
+
+/* ════════════ quitar y empezar de nuevo ════════════ */
+/* Lo que se está leyendo se corta: deja de cobrarse y lo que vuelva no entra. */
+function cortar(a){ if(a.ctrl){ try{ a.ctrl.abort(); }catch(e){} a.ctrl=null; } }
+function quitar(id){
+ const a=ARCHIVOS.find(x=>x.id===id); if(!a) return;
+ const n=MATS.filter(m=>m.archivoId===id).length;
+ if(n&&!confirm(`Se saca «${a.nombre}» y ${n===1?"su matrícula":"sus "+n+" matrículas"} de la lista. Para volver a verlas habría que leerlo de nuevo (y pagarlo). ¿Seguro?`)) return;
+ cortar(a);
+ ARCHIVOS=ARCHIVOS.filter(x=>x.id!==id); MATS=MATS.filter(m=>m.archivoId!==id); soltarUrl(id);
+ pintarTodo(); guardar(true); estado("Se sacó «"+a.nombre+"».");
+}
+$("#bLimpiar").addEventListener("click",()=>{
+ const leyendo=ARCHIVOS.filter(a=>a.estado==="leyendo").length;
+ const n=vivas().length;
+ if((n||leyendo)&&!confirm((n?"Se borra lo leído y habría que volver a leerlo (y pagarlo).":"")
+  +(leyendo?(n?" ":"")+(leyendo===1?"Hay un PDF leyéndose: se corta.":"Hay "+leyendo+" PDF leyéndose: se cortan."):"")+" ¿Seguro?")) return;
+ ARCHIVOS.forEach(cortar);
+ ARCHIVOS=[]; MATS=[]; ACTIVA=null;
+ for(const id of [...urls.keys()]) soltarUrl(id);
+ pintarTodo(); guardar(true); estado("Listo: la lista quedó vacía.");
+});
+window.addEventListener("beforeunload",e=>{ if(ARCHIVOS.some(a=>a.estado==="leyendo")){ e.preventDefault(); e.returnValue=""; } });
+
+/* ════════════ entrar los PDF ════════════ */
+async function leer(a,enfocar){
+ cortar(a);
+ const ctrl=new AbortController(); a.ctrl=ctrl;
+ a.estado="leyendo"; a.error=""; a.detalle=""; a.progreso="";
+ MATS=MATS.filter(m=>m.archivoId!==a.id);
+ pintarTodo();
+ if(enfocar){ const d=document.querySelector(`[data-prog="${a.id}"]`); if(d) d.focus(); }
+ let r=null, err=null;
+ try{
+  r=await leerPdf(a,n=>{
+   a.progreso="Leyendo… "+(n===1?"va 1 matrícula.":"van "+n+" matrículas.");
+   const d=document.querySelector(`[data-prog="${a.id}"]`); if(d) d.textContent=a.progreso;
+  },ctrl.signal);
+ }catch(e){ err=e; }
+ /* si mientras tanto se quitó el archivo o se empezó de nuevo, lo que volvió no entra */
+ if(a.ctrl!==ctrl||!ARCHIVOS.includes(a)) return;
+ a.ctrl=null;
+ if(err){
+  a.estado="error";
+  a.error=err instanceof ErrorLectura?err.message:RED.test(String(err&&err.message))?"No hay conexión con la API. Revisá internet y probá de nuevo.":"Algo falló al leer. Probá de nuevo.";
+  a.detalle=err instanceof ErrorLectura?err.detalle:String(err&&err.message||err);
+  estado("No se pudo leer «"+a.nombre+"»: "+a.error);
+ }else{
+  a.estado="listo"; a.costo=r.costo;
+  for(const x of r.matriculas){
+   const info={};
+   const fiel=limpiar(x.descripcion||"",info);
+   MATS.push({id:nuevoId(),archivoId:a.id,numero:String(x.numero||"").trim(),pagina:Math.max(1,parseInt(x.pagina,10)||1),
+    cuenta:x.cuenta||"",nomenclatura:x.nomenclatura||"",antecedente:x.antecedente||"",plano:x.plano||"",
+    titulares:x.titulares||"",gravamenes:x.gravamenes||"",dudas:Array.isArray(x.dudas)?x.dudas.filter(Boolean).map(String):[],
+    original:fiel,fiel,cortes:info.cortes||[]});
+  }
+  /* las matrículas quedan en el orden de los archivos, y dentro de cada uno, en el del PDF */
+  const orden=new Map(ARCHIVOS.map((x,i)=>[x.id,i]));
+  MATS=vivas().sort((p,q)=>(orden.get(p.archivoId)-orden.get(q.archivoId))||(p.pagina-q.pagina));
+  estado("Listo: «"+a.nombre+"».");
+ }
+ pintarTodo(); guardar();
+}
+const huella=f=>[f.name,f.size,f.lastModified].join("|");
+async function entrar(files){
+ const pdfs=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
+ if(!pdfs.length){ estado("Eso no es un PDF."); return; }
+ if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
+ const ya=new Set(ARCHIVOS.map(a=>a.huella));
+ const repetidos=pdfs.filter(f=>ya.has(huella(f)));
+ const nuevos=pdfs.filter(f=>!ya.has(huella(f))).filter((f,i,arr)=>arr.findIndex(g=>huella(g)===huella(f))===i)
+  .map(f=>({id:nuevoId(),nombre:f.name,huella:huella(f),blob:f,estado:"leyendo",progreso:"En espera…"}));
+ if(repetidos.length) estado((repetidos.length===1?"«"+repetidos[0].name+"» ya está en la lista":"Hay "+repetidos.length+" PDF que ya están en la lista")+": no se vuelve a leer.");
+ if(!nuevos.length) return;
+ ARCHIVOS.push(...nuevos);
+ pintarTodo(); guardar(true);
+ /* de a tres por vez: alcanza y no satura la cuenta. Lo que se quitó mientras esperaba, o
+    lo que borró «Empezar de nuevo», se saltea. */
+ const cola=nuevos.slice();
+ await Promise.all([0,1,2].map(async()=>{ while(cola.length){ const a=cola.shift(); if(ARCHIVOS.includes(a)) await leer(a); } }));
+}
+const zona=$("#soltar");
+zona.addEventListener("click",()=>$("#archivos").click());
+zona.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("#archivos").click(); } });
+$("#archivos").addEventListener("change",e=>{ const f=e.target.files; if(f&&f.length) entrar(f); e.target.value=""; });
+["dragenter","dragover"].forEach(t=>document.addEventListener(t,e=>{ e.preventDefault(); zona.classList.add("encima"); }));
+["dragleave","drop"].forEach(t=>document.addEventListener(t,e=>{ e.preventDefault(); if(t==="drop"||!e.relatedTarget) zona.classList.remove("encima"); }));
+document.addEventListener("drop",e=>{ if(e.dataTransfer&&e.dataTransfer.files.length) entrar(e.dataTransfer.files); });
+
+pintarClave();
+recuperar();
+</script>
+</body>
+</html>
