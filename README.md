@@ -16,12 +16,14 @@ cierra o si no da la superficie declarada. Si un solo número lo arregla, lo pro
 
 1. La primera vez, cargar la clave de la API de Anthropic en «Clave de la API». Queda guardada
    sólo en ese navegador.
-2. Arrastrar uno o varios PDF. Un PDF puede traer varias matrículas.
+2. Arrastrar uno o varios PDF —un PDF puede traer varias matrículas— o, desde el celular, tocar
+   «Sacar foto», sacar una foto por hoja y tocar «Leer esta matrícula». Desde el celular, el texto
+   se manda a la compu con «Compartir».
 3. Comparar lo leído con la matrícula, que se ve al lado. Si algo está mal leído, se corrige en la
    versión fiel y la versión en letras se rehace sola.
 4. «Copiar» y pegar en Word.
 
-Los PDF se mandan a Anthropic para leerlos, y cada lectura cuesta unos centavos de dólar por
+Las fotos y los PDF se mandan a Anthropic para leerlos, y cada lectura cuesta unos centavos de dólar por
 matrícula. Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.
 
 ## Pruebas

@@ -90,6 +90,18 @@ textarea.texto{width:100%;min-height:9rem;resize:vertical;color:var(--fg);displa
 .dato pre{white-space:pre-wrap;font:inherit;font-size:.92rem;margin:4px 0 0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}
 button.chico{padding:.2rem .6rem;font-size:.85rem}
 .ver{margin-left:auto}
+.camara{text-align:center}
+button.grande{font-size:1.1rem;padding:.8rem 1.4rem;min-height:48px}
+.camara .nota{max-width:640px;margin:.6rem auto 0}
+.bandeja{margin-top:14px}
+.fotos{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.foto{position:relative;width:110px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg)}
+.foto img{display:block;width:100%;height:140px;object-fit:contain;background:#888}
+.foto span{display:block;font-size:.8rem;color:var(--muted);padding:2px 4px}
+.foto button{position:absolute;top:4px;right:4px;padding:0 .45rem;font-size:.85rem;line-height:1.6}
+.bandeja .fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+.bandeja .fila button{min-height:44px}
+.visor img{flex:1;min-height:0;width:100%;object-fit:contain;background:#888}
 footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 .oculto{display:none!important}
 </style>
@@ -98,7 +110,7 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 <div class="envoltura">
 <header>
  <h1>Lector de matrículas</h1>
- <p>Arrastrás el PDF de la matrícula y sale la descripción del inmueble, fiel y en letras, lista para pegar en Word.</p>
+ <p>Le sacás una foto a la matrícula, o arrastrás el PDF, y sale la descripción del inmueble, fiel y en letras, lista para pegar en Word.</p>
 </header>
 
 <details class="caja clave" id="cajaClave">
@@ -110,11 +122,27 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
  <p class="nota" id="ecoClave">Se guarda sólo en esta computadora, en este navegador.</p>
 </details>
 
+<div class="caja camara" id="camara">
+ <button id="bFoto" class="primario grande" type="button">Sacar foto de la matrícula</button>
+ <div><button id="bGaleria" class="chico oculto" type="button" style="margin-top:8px">Elegir fotos ya sacadas</button></div>
+ <p class="nota" id="consejoFoto">Con buena luz, la hoja entera y derecha, sin sombra ni reflejos. Si la matrícula sigue en otra hoja (un anexo), sacale foto también antes de leer.</p>
+ <input id="foto" type="file" accept="image/*" capture="environment" hidden>
+ <input id="fotosGaleria" type="file" accept="image/*" multiple hidden>
+ <div id="bandeja" class="bandeja oculto">
+  <div class="fotos" id="fotos" aria-live="polite"></div>
+  <div class="fila">
+   <button id="bOtraHoja" type="button">Sacar otra hoja</button>
+   <button id="bLeerFotos" class="primario" type="button">Leer esta matrícula</button>
+   <button id="bDescartar" type="button">Descartar las fotos</button>
+  </div>
+ </div>
+</div>
+
 <div class="soltar" id="soltar" role="button" tabindex="0" aria-label="Elegir los PDF de las matrículas">
- <strong>Arrastrá acá los PDF de las matrículas</strong><br>
- <span>o tocá para elegirlos. Pueden ser varios, y un PDF puede traer varias matrículas.</span>
- <p class="nota">Los PDF se mandan a Anthropic para leerlos, y cada lectura se cobra: unos centavos de dólar por matrícula. Lo que lee la máquina hay que compararlo con la matrícula.</p>
- <input id="archivos" type="file" accept="application/pdf,.pdf" multiple hidden>
+ <strong id="soltarTit">Arrastrá acá los PDF de las matrículas</strong><br>
+ <span id="soltarSub">o tocá para elegirlos. Pueden ser varios, y un PDF puede traer varias matrículas.</span>
+ <p class="nota">Las fotos y los PDF se mandan a Anthropic para leerlos, y cada lectura se cobra: unos centavos de dólar por matrícula. Lo que lee la máquina hay que compararlo con la matrícula.</p>
+ <input id="archivos" type="file" accept="application/pdf,.pdf,image/*" multiple hidden>
 </div>
 
 <p class="estado" id="estado" role="status" aria-live="polite"></p>
@@ -122,6 +150,7 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 <div class="barra oculto" id="barra">
  <button id="bTodasLetras" class="primario">Copiar todas en letras</button>
  <button id="bTodasFiel">Copiar todas fieles</button>
+ <button id="bCompartirTodas" class="oculto">Compartir todas</button>
  <button id="bLimpiar">Empezar de nuevo</button>
 </div>
 
@@ -130,6 +159,7 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
  <aside class="visor" id="visor" aria-label="La matrícula en PDF">
   <div class="tit"><span id="visorTit">La matrícula</span><a id="visorAfuera" href="#" target="_blank" rel="noopener">Abrir aparte</a></div>
   <iframe id="visorPdf" title="La matrícula en PDF"></iframe>
+  <img id="visorImg" class="oculto" alt="La foto de la matrícula">
  </aside>
 </div>
 
@@ -176,12 +206,12 @@ const MODELO="claude-opus-5-5";
    se cobra a su tarifa, y uno que no esté en la tabla se cuenta a la más cara */
 const PRECIOS={"claude-opus-5-5":[4,20],"claude-opus-5":[5,25],"claude-opus-4-8":[5,25],"claude-opus-4-7":[5,25],"claude-sonnet-5-5":[2,10],"claude-sonnet-5":[2,10]};
 const precioDe=m=>{ const k=Object.keys(PRECIOS).find(x=>String(m||"").startsWith(x)); return k?PRECIOS[k]:[10,50]; };
-const PROMPT=`Vas a leer matrículas del Registro General de la Provincia de Córdoba (folio real) que vienen en un PDF, casi siempre escaneado. Una escribana va a usar lo que transcribas en una escritura, así que lo que importa es la exactitud, sobre todo en los números.
+const PROMPT=`Vas a leer matrículas del Registro General de la Provincia de Córdoba (folio real) que vienen en un PDF, casi siempre escaneado, o en fotos sacadas con el celular, una hoja por foto. Una escribana va a usar lo que transcribas en una escritura, así que lo que importa es la exactitud, sobre todo en los números.
 
 Cómo es el documento:
 - Cada matrícula es un formulario con campos numerados: 1-MATRÍCULA, 2-DEPARTAMENTO, 3-CUENTA, 4-NOMENCLATURA, 5-DESCRIPCIÓN DEL INMUEBLE, 6-ANTECEDENTE DOMINIAL, 7-PLANO, y abajo las columnas a) Titulares sobre el dominio, b) Gravámenes, restricciones y otros derechos reales, c) Cancelaciones, d) Certificaciones.
 - Un PDF puede traer varias matrículas, una detrás de otra. Una matrícula puede seguir en las hojas siguientes (un ANEXO, o el dorso): lo que sigue en un anexo es parte de la misma matrícula. Las hojas en blanco y los dorsos sin texto no cuentan.
-- Las hojas pueden estar escaneadas giradas.
+- Las hojas pueden estar escaneadas giradas. En las fotos la hoja puede estar torcida, en perspectiva, con sombras o con reflejos.
 - El papel puede tener marcas a mano —subrayados, rayas, tildes— de quien lo leyó. No son parte del texto: transcribí lo impreso. Si una marca tapa un número o una letra, decilo en «dudas».
 - El texto impreso rellena los renglones con barras (////). Podés omitirlas.
 
@@ -194,7 +224,7 @@ Cómo transcribir:
 
 Los campos:
 - numero: el número de la matrícula (campo 1).
-- pagina: la hoja del PDF donde empieza esa matrícula; la primera hoja es 1.
+- pagina: la hoja del PDF, o el número de foto, donde empieza esa matrícula; la primera es 1.
 - cuenta, nomenclatura, antecedente, plano: como figuran. En la nomenclatura poné si es UR o RU y los rótulos con sus valores (D:, Ped:, Hoja:, P:, y los que haya).
 - descripcion: el campo 5 entero, sin el rótulo.
 - titulares: la columna a) entera, con la proporción de cada titular si figura.
@@ -212,6 +242,7 @@ const ESQUEMA={
   }}}}
 };
 const TOPE_BASE64=30*1024*1024;   /* el pedido entero no puede pasar de 32 MB */
+const TOPE_IMAGEN=9.5*1024*1024;   /* y cada imagen, de 10 MB en base64 */
 
 /* Un error con un mensaje para ella, en castellano, y el original de la API aparte y chico */
 class ErrorLectura extends Error{ constructor(msg,detalle){ super(msg); this.detalle=detalle||""; } }
@@ -235,7 +266,7 @@ function aBase64(blob){
   r.readAsDataURL(blob);
  });
 }
-async function pedir(clave,b64,conRespaldo,signal){
+async function pedir(clave,contenido,conRespaldo,signal){
  const headers={
   "content-type":"application/json",
   "x-api-key":clave,
@@ -246,20 +277,35 @@ async function pedir(clave,b64,conRespaldo,signal){
   model:MODELO, max_tokens:64000, stream:true,
   output_config:{effort:"medium", format:{type:"json_schema", schema:ESQUEMA}},
   system:PROMPT,
-  messages:[{role:"user",content:[
-   {type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},
-   {type:"text",text:"Transcribí las matrículas de este PDF."}
-  ]}]
+  messages:[{role:"user",content:contenido}]
  };
  /* si el modelo se niega a leer, la API lo reintenta sola con otro modelo */
  if(conRespaldo){ headers["anthropic-beta"]="server-side-fallback-2026-07-01"; cuerpo.fallbacks="default"; }
  return fetch(API_URL,{method:"POST",headers,body:JSON.stringify(cuerpo),signal});
 }
+/* El contenido del pedido: el PDF entero como documento, o las fotos como imágenes, cada una
+   con su rótulo («Hoja 1:») y todas antes del pedido, que es como mejor lee según la
+   documentación de Anthropic. */
+async function contenidoDe(archivo){
+ if(archivo.tipo==="fotos"){
+  const c=[]; let total=0;
+  for(const [i,b] of archivo.blobs.entries()){
+   const b64=await aBase64(b); total+=b64.length;
+   if(b64.length>TOPE_IMAGEN) throw new ErrorLectura("Una de las fotos es demasiado pesada. Sacala de nuevo.");
+   c.push({type:"text",text:"Hoja "+(i+1)+":"},{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}});
+  }
+  if(total>TOPE_BASE64) throw new ErrorLectura("Son demasiadas fotos para una sola lectura. Leelas en dos tandas.");
+  c.push({type:"text",text:archivo.blobs.length===1?"Transcribí la matrícula de esta foto.":"Transcribí la matrícula de estas "+archivo.blobs.length+" fotos: son las hojas en orden."});
+  return c;
+ }
+ const b64=await aBase64(archivo.blob);
+ if(b64.length>TOPE_BASE64) throw new ErrorLectura("El PDF es demasiado grande para leerlo de una vez (el tope es de unos 22 MB). Partilo en dos.");
+ return [{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:"Transcribí las matrículas de este PDF."}];
+}
 async function leerPdf(archivo,alAvanzar,signal){
  const clave=leerClave();
  if(!clave) throw new ErrorLectura("Falta la clave de la API. Cargala arriba, en «Clave de la API».");
- const b64=await aBase64(archivo.blob);
- if(b64.length>TOPE_BASE64) throw new ErrorLectura("El PDF es demasiado grande para leerlo de una vez (el tope es de unos 22 MB). Partilo en dos.");
+ const b64=await contenidoDe(archivo);
  let r=await pedir(clave,b64,true,signal);
  if(r.status===400){
   /* el respaldo es una función nueva de la API: si la rechaza, se lee sin respaldo */
@@ -341,12 +387,16 @@ let ARCHIVOS=[], MATS=[], ACTIVA=null;
 const urls=new Map();
 const nuevoId=()=>Math.random().toString(36).slice(2,10);
 const vivas=()=>{ const ids=new Set(ARCHIVOS.map(a=>a.id)); return MATS.filter(m=>ids.has(m.archivoId)); };
-function urlDe(arch){
- if(!arch||!arch.blob) return "";
- if(!urls.has(arch.id)) urls.set(arch.id,URL.createObjectURL(arch.blob));
- return urls.get(arch.id);
+/* la dirección para ver el archivo; de las fotos, la de la hoja pedida */
+function urlDe(arch,hoja){
+ if(!arch) return "";
+ const fotos=arch.tipo==="fotos", b=fotos?(arch.blobs||[])[Math.min(Math.max(1,hoja||1),(arch.blobs||[]).length)-1]:arch.blob;
+ if(!b) return "";
+ const k=fotos?arch.id+":"+(arch.blobs.indexOf(b)+1):arch.id;
+ if(!urls.has(k)) urls.set(k,URL.createObjectURL(b));
+ return urls.get(k);
 }
-function soltarUrl(id){ if(urls.has(id)){ URL.revokeObjectURL(urls.get(id)); urls.delete(id); } }
+function soltarUrl(id){ for(const k of [...urls.keys()]) if(k===id||k.startsWith(id+":")){ URL.revokeObjectURL(urls.get(k)); urls.delete(k); } }
 
 /* ════════════ guardar la última tanda ════════════ */
 /* Sólo la última, en este navegador: si se cierra sin querer, vuelve. No se va juntando una
@@ -368,7 +418,7 @@ function guardar(ya){
   try{
    const db=await abrirDb();
    const tx=db.transaction(ALM,"readwrite");
-   const archivos=ARCHIVOS.map(a=>({id:a.id,nombre:a.nombre,huella:a.huella,blob:a.blob,costo:a.costo||0,
+   const archivos=ARCHIVOS.map(a=>({id:a.id,nombre:a.nombre,huella:a.huella,tipo:a.tipo||"pdf",blob:a.blob,blobs:a.blobs,costo:a.costo||0,
     estado:a.estado==="leyendo"?"error":a.estado,
     error:a.estado==="leyendo"?"La lectura se interrumpió al cerrar o recargar la página.":a.error||"", detalle:a.detalle||""}));
    if(archivos.length) tx.objectStore(ALM).put({archivos,matriculas:vivas()},"ultima");
@@ -421,6 +471,7 @@ function avisosHtml(m,p){
  return li.join("");
 }
 const DATOS=[["cuenta","Cuenta","La cuenta copiada","Pegala"],["nomenclatura","Nomenclatura","La nomenclatura copiada","Pegala"],["antecedente","Antecedente dominial","El antecedente copiado","Pegalo"],["plano","Plano","El plano copiado","Pegalo"],["titulares","Titulares","Los titulares copiados","Pegalos"],["gravamenes","Gravámenes, restricciones y otros derechos","Los gravámenes copiados","Pegalos"]];
+const esFotos=m=>{ const a=ARCHIVOS.find(x=>x.id===m.archivoId); return !!a&&a.tipo==="fotos"; };
 function tarjeta(m){
  const p=proc(m);
  const tit=titulo(m);
@@ -430,16 +481,16 @@ function tarjeta(m){
  el.innerHTML=`
   <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
    <div style="flex:1 1 240px;min-width:0"><h2>${esc(tit)}</h2>
-   <div class="sub">${esc([m.cuenta&&("Cuenta "+m.cuenta),m.pagina&&("hoja "+m.pagina+" del PDF")].filter(Boolean).join(" · "))}</div></div>
+   <div class="sub">${esc([m.cuenta&&("Cuenta "+m.cuenta),m.pagina&&(esFotos(m)?"foto "+m.pagina:"hoja "+m.pagina+" del PDF")].filter(Boolean).join(" · "))}</div></div>
    <button class="chico ver" data-acc="ver" aria-label="Ver la matrícula en el PDF: ${esc(tit)}">Ver la matrícula</button>
   </div>
   <ul class="avisos" data-zona="avisos">${avisosHtml(m,p)}</ul>
   <div class="bloque">
-   <div class="rot"><h3>En letras</h3><button class="chico" data-acc="copiarLetras" aria-label="Copiar en letras: ${esc(tit)}">Copiar</button></div>
+   <div class="rot"><h3>En letras</h3><button class="chico" data-acc="copiarLetras" aria-label="Copiar en letras: ${esc(tit)}">Copiar</button>${PUEDE_COMPARTIR?`<button class="chico" data-acc="compartirLetras" aria-label="Compartir en letras: ${esc(tit)}">Compartir</button>`:""}</div>
    <div class="texto" data-zona="letras">${html(tramos(p.letras))}</div>
   </div>
   <div class="bloque">
-   <div class="rot"><h3>Fiel</h3><button class="chico" data-acc="copiarFiel" aria-label="Copiar la fiel: ${esc(tit)}">Copiar</button>
+   <div class="rot"><h3>Fiel</h3><button class="chico" data-acc="copiarFiel" aria-label="Copiar la fiel: ${esc(tit)}">Copiar</button>${PUEDE_COMPARTIR?`<button class="chico" data-acc="compartirFiel" aria-label="Compartir la fiel: ${esc(tit)}">Compartir</button>`:""}
     <p class="nota">Si la máquina leyó mal algo, corregilo acá: la versión en letras se rehace sola.</p></div>
    <textarea class="texto" data-zona="fiel" spellcheck="false" aria-label="Descripción fiel, ${esc(tit)}"></textarea>
    <button class="chico${m.original!==m.fiel?"":" oculto"}" data-acc="restaurar" style="margin-top:6px">Volver a lo que leyó la máquina</button>
@@ -498,10 +549,10 @@ function pintarTodo(){
  }
  const hay=ARCHIVOS.length>0;
  $("#barra").classList.toggle("oculto",!hay);
- $("#bTodasLetras").disabled=$("#bTodasFiel").disabled=!mats.length;
+ $("#bTodasLetras").disabled=$("#bTodasFiel").disabled=$("#bCompartirTodas").disabled=!mats.length;
  $("#cuerpo").classList.toggle("con-visor",mats.length>0);
  if(mats.length&&(!ACTIVA||!mats.some(m=>m.id===ACTIVA))) activar(mats[0].id,false);
- else if(!mats.length){ ACTIVA=null; const fr=$("#visorPdf"); fr.dataset.src=""; fr.src="about:blank"; }
+ else if(!mats.length){ ACTIVA=null; const fr=$("#visorPdf"); fr.dataset.src=""; fr.src="about:blank"; $("#visorImg").removeAttribute("src"); }
  else marcarActiva();
 }
 function marcarActiva(){
@@ -510,14 +561,17 @@ function marcarActiva(){
 function activar(id,abrirSiAngosto){
  const m=vivas().find(x=>x.id===id); if(!m) return;
  const a=ARCHIVOS.find(x=>x.id===m.archivoId);
- const url=urlDe(a); if(!url) return;
- const destino=url+"#page="+(m.pagina||1);
+ const fotos=a&&a.tipo==="fotos";
+ const url=urlDe(a,m.pagina); if(!url) return;
+ const destino=fotos?url:url+"#page="+(m.pagina||1);
  if(ACTIVA!==id){ ACTIVA=id; marcarActiva(); }
- $("#visorTit").textContent=titulo(m)+(m.pagina?" · hoja "+m.pagina:"");
+ $("#visorTit").textContent=titulo(m)+(m.pagina?(fotos?" · foto ":" · hoja ")+m.pagina:"");
  $("#visorAfuera").href=destino;
- const fr=$("#visorPdf");
+ const fr=$("#visorPdf"), im=$("#visorImg");
+ fr.classList.toggle("oculto",fotos); im.classList.toggle("oculto",!fotos);
+ if(fotos){ if(im.getAttribute("src")!==url) im.src=url; }
  /* el visor de PDF no siempre salta de hoja si sólo cambia el «#page»: se recarga */
- if(fr.dataset.src!==destino){ fr.dataset.src=destino; fr.src="about:blank"; setTimeout(()=>{ if(fr.dataset.src===destino) fr.src=destino; },30); }
+ else if(fr.dataset.src!==destino){ fr.dataset.src=destino; fr.src="about:blank"; setTimeout(()=>{ if(fr.dataset.src===destino) fr.src=destino; },30); }
  if(abrirSiAngosto&&!window.matchMedia("(min-width:1100px)").matches) window.open(destino,"_blank","noopener");
 }
 
@@ -556,10 +610,26 @@ async function copiar(boton,htmlTxt,plano,dicho,{negritas=true,plural=false,pega
   :como==="plano"&&negritas?dicho+", sin formato (este navegador no copia negritas). "+pegala+" en Word."
   :dicho+(negritas?" con las negritas":"")+". "+pegala+" en Word.";
  estado(msg);
- if(boton){
-  const txt=boton.dataset.txt||boton.textContent; boton.dataset.txt=txt;
-  boton.textContent=como?"Copiada ✓":"No se pudo"; boton.classList.add(como?"hecho":"fallo");
-  clearTimeout(boton._t); boton._t=setTimeout(()=>{ boton.textContent=txt; boton.classList.remove("hecho","fallo"); },2200);
+ marcarBoton(boton,!!como,"Copiada ✓");
+}
+function marcarBoton(boton,ok,txtOk){
+ if(!boton) return;
+ const txt=boton.dataset.txt||boton.textContent; boton.dataset.txt=txt;
+ boton.textContent=ok?txtOk:"No se pudo"; boton.classList.remove("hecho","fallo"); boton.classList.add(ok?"hecho":"fallo");
+ clearTimeout(boton._t); boton._t=setTimeout(()=>{ boton.textContent=txt; boton.classList.remove("hecho","fallo"); },2200);
+}
+/* En el celular, «Compartir» abre la hoja de compartir del teléfono (WhatsApp, mail…). Va el
+   texto solo: las negritas no viajan, y se avisa. */
+const PUEDE_COMPARTIR=typeof navigator!=="undefined"&&typeof navigator.share==="function";
+async function compartir(boton,tit,texto){
+ try{
+  await navigator.share({title:tit,text:texto});
+  marcarBoton(boton,true,"Listo ✓");
+  estado("Compartido. Llega sin las negritas: en Word, ponéselas a la designación y a la superficie.");
+ }catch(e){
+  if(e&&e.name==="AbortError") return;
+  marcarBoton(boton,false);
+  estado("No se pudo compartir. Probá con «Copiar».");
  }
 }
 const parrafo=tr=>"<p>"+html(tr)+"</p>";
@@ -574,6 +644,8 @@ $("#lista").addEventListener("click",e=>{
  if(b.dataset.acc==="ver") activar(m.id,true);
  if(b.dataset.acc==="copiarLetras") copiar(b,parrafo(tramos(p.letras)),sinMarcas(p.letras),"La descripción en letras copiada");
  if(b.dataset.acc==="copiarFiel") copiar(b,parrafo(tramos(p.fielMarcado)),p.fiel,"La descripción fiel copiada");
+ if(b.dataset.acc==="compartirLetras") compartir(b,titulo(m),sinMarcas(p.letras));
+ if(b.dataset.acc==="compartirFiel") compartir(b,titulo(m),p.fiel);
  if(b.dataset.acc==="copiarDato"){ const d=DATOS.find(x=>x[0]===b.dataset.k); const v=m[b.dataset.k]||""; copiar(b,"<p>"+esc(v).replace(/\n/g,"<br>")+"</p>",v,d?d[2]:"El dato copiado",{negritas:false,pegar:d?d[3]:"Pegalo"}); }
  if(b.dataset.acc==="restaurar"){ m.fiel=m.original; card.querySelector("textarea").value=m.fiel; refrescar(card,m); guardar(); card.querySelector("textarea").focus(); }
 });
@@ -598,6 +670,10 @@ function todas(tipo,boton){
 }
 $("#bTodasLetras").addEventListener("click",e=>todas("letras",e.currentTarget));
 $("#bTodasFiel").addEventListener("click",e=>todas("fiel",e.currentTarget));
+$("#bCompartirTodas").addEventListener("click",e=>{
+ const mats=vivas();
+ compartir(e.currentTarget,"Descripciones",mats.map(m=>titulo(m)+"\n\n"+sinMarcas(proc(m).letras)).join("\n\n"));
+});
 
 /* ════════════ quitar y empezar de nuevo ════════════ */
 /* Lo que se está leyendo se corta: deja de cobrarse y lo que vuelva no entra. */
@@ -614,7 +690,7 @@ $("#bLimpiar").addEventListener("click",()=>{
  const leyendo=ARCHIVOS.filter(a=>a.estado==="leyendo").length;
  const n=vivas().length;
  if((n||leyendo)&&!confirm((n?"Se borra lo leído y habría que volver a leerlo (y pagarlo).":"")
-  +(leyendo?(n?" ":"")+(leyendo===1?"Hay un PDF leyéndose: se corta.":"Hay "+leyendo+" PDF leyéndose: se cortan."):"")+" ¿Seguro?")) return;
+  +(leyendo?(n?" ":"")+(leyendo===1?"Hay una lectura en curso: se corta.":"Hay "+leyendo+" lecturas en curso: se cortan."):"")+" ¿Seguro?")) return;
  ARCHIVOS.forEach(cortar);
  ARCHIVOS=[]; MATS=[]; ACTIVA=null;
  for(const id of [...urls.keys()]) soltarUrl(id);
@@ -664,8 +740,10 @@ async function leer(a,enfocar){
 }
 const huella=f=>[f.name,f.size,f.lastModified].join("|");
 async function entrar(files){
+ const imagenes=[...files].filter(f=>/^image\//i.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+ if(imagenes.length) agregarFotos(imagenes);
  const pdfs=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
- if(!pdfs.length){ estado("Eso no es un PDF."); return; }
+ if(!pdfs.length){ if(!imagenes.length) estado("Eso no es un PDF ni una foto."); return; }
  if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
  const ya=new Set(ARCHIVOS.map(a=>a.huella));
  const repetidos=pdfs.filter(f=>ya.has(huella(f)));
@@ -687,6 +765,88 @@ $("#archivos").addEventListener("change",e=>{ const f=e.target.files; if(f&&f.le
 ["dragenter","dragover"].forEach(t=>document.addEventListener(t,e=>{ e.preventDefault(); zona.classList.add("encima"); }));
 ["dragleave","drop"].forEach(t=>document.addEventListener(t,e=>{ e.preventDefault(); if(t==="drop"||!e.relatedTarget) zona.classList.remove("encima"); }));
 document.addEventListener("drop",e=>{ if(e.dataTransfer&&e.dataTransfer.files.length) entrar(e.dataTransfer.files); });
+
+/* ════════════ las fotos ════════════ */
+/* Se sacan de a una, una por hoja, y se juntan en la bandeja; «Leer» las manda juntas, así una
+   descripción que sigue en el anexo sale entera. La foto del celular pesa varios megas y viene
+   más grande de lo que el modelo aprovecha (2576 px de lado largo y 4784 tokens por imagen,
+   según la documentación de Anthropic): se achica justo a ese tope, sin comprimirla de más,
+   porque la compresión fuerte arruina la letra chica. El navegador ya la endereza según cómo
+   se sacó. */
+const TACTIL=window.matchMedia("(pointer: coarse)").matches;
+const LADO_MAX=2576, PIX_MAX=4784*28*28*0.97;
+let FOTOS=[];
+function prepararFoto(file){
+ return new Promise((res,rej)=>{
+  const url=URL.createObjectURL(file), img=new Image();
+  img.onload=()=>{
+   URL.revokeObjectURL(url);
+   const w=img.naturalWidth, h=img.naturalHeight;
+   if(!w||!h){ rej(new Error("La foto está vacía.")); return; }
+   const k=Math.min(1,LADO_MAX/Math.max(w,h),Math.sqrt(PIX_MAX/(w*h)));
+   const c=document.createElement("canvas");
+   c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(h*k));
+   c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+   c.toBlob(b=>b?res(b):rej(new Error("No se pudo preparar la foto.")),"image/jpeg",0.9);
+  };
+  img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("Ese archivo no es una foto que el navegador pueda abrir.")); };
+  img.src=url;
+ });
+}
+function pintarBandeja(){
+ const n=FOTOS.length;
+ $("#bandeja").classList.toggle("oculto",!n);
+ $("#bFoto").classList.toggle("oculto",!!n);
+ $("#bGaleria").classList.toggle("oculto",!TACTIL||!!n);
+ $("#fotos").innerHTML=FOTOS.map((f,i)=>`<div class="foto"><img src="${f.url}" alt="Hoja ${i+1}"><span>Hoja ${i+1}</span><button type="button" data-borrar="${f.id}" aria-label="Sacar la hoja ${i+1}">✕</button></div>`).join("");
+ $("#bLeerFotos").textContent=n>1?"Leer esta matrícula ("+n+" hojas)":"Leer esta matrícula";
+ $("#bOtraHoja").textContent=TACTIL?"Sacar otra hoja":"Agregar otra hoja";
+}
+async function agregarFotos(files){
+ estado(files.length===1?"Preparando la foto…":"Preparando las fotos…");
+ let mal=0;
+ for(const f of files){
+  try{ const b=await prepararFoto(f); FOTOS.push({id:nuevoId(),blob:b,url:URL.createObjectURL(b)}); }
+  catch(e){ mal++; }
+ }
+ pintarBandeja();
+ if(mal) estado(mal===1?"Una foto no se pudo abrir: probá sacarla de nuevo.":mal+" fotos no se pudieron abrir: probá sacarlas de nuevo.");
+ else estado(FOTOS.length===1?"Foto lista. Si la matrícula sigue en otra hoja, sacale foto también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
+}
+const abrirCamara=()=>$(TACTIL?"#foto":"#fotosGaleria").click();
+$("#bFoto").addEventListener("click",abrirCamara);
+$("#bOtraHoja").addEventListener("click",abrirCamara);
+$("#bGaleria").addEventListener("click",()=>$("#fotosGaleria").click());
+["#foto","#fotosGaleria"].forEach(sel=>$(sel).addEventListener("change",e=>{ const f=[...(e.target.files||[])]; e.target.value=""; if(f.length) agregarFotos(f); }));
+$("#fotos").addEventListener("click",e=>{
+ const b=e.target.closest("[data-borrar]"); if(!b) return;
+ const f=FOTOS.find(x=>x.id===b.dataset.borrar); if(!f) return;
+ URL.revokeObjectURL(f.url); FOTOS=FOTOS.filter(x=>x!==f); pintarBandeja();
+ estado(FOTOS.length?"Se sacó esa hoja.":"Se sacó la foto.");
+});
+$("#bDescartar").addEventListener("click",()=>{
+ if(FOTOS.length>1&&!confirm("Se descartan las "+FOTOS.length+" fotos. ¿Seguro?")) return;
+ for(const f of FOTOS) URL.revokeObjectURL(f.url);
+ FOTOS=[]; pintarBandeja(); estado("Fotos descartadas.");
+});
+$("#bLeerFotos").addEventListener("click",()=>{
+ if(!FOTOS.length) return;
+ if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
+ const d=new Date(), hh=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+ const a={id:nuevoId(),tipo:"fotos",nombre:"Fotos de las "+hh+" ("+(FOTOS.length===1?"1 hoja":FOTOS.length+" hojas")+")",
+  huella:"fotos:"+nuevoId(),blobs:FOTOS.map(f=>f.blob),estado:"leyendo",progreso:"Leyendo… puede tardar uno o dos minutos."};
+ for(const f of FOTOS) URL.revokeObjectURL(f.url);
+ FOTOS=[]; pintarBandeja();
+ ARCHIVOS.push(a); pintarTodo(); guardar(true);
+ const caja=document.querySelector(`[data-archivo="${a.id}"]`); if(caja) caja.scrollIntoView({block:"start",behavior:"smooth"});
+ leer(a);
+});
+if(TACTIL){
+ $("#soltarTit").textContent="O elegí los PDF de las matrículas";
+ $("#soltarSub").textContent="Pueden ser varios, y un PDF puede traer varias matrículas.";
+}else $("#bFoto").textContent="Agregar fotos de la matrícula";
+$("#bCompartirTodas").classList.toggle("oculto",!PUEDE_COMPARTIR);
+pintarBandeja();
 
 pintarClave();
 recuperar();

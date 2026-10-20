@@ -62,8 +62,14 @@ const CORS={"access-control-allow-origin":"*","access-control-allow-headers":"*"
 let fallas=0;
 const ok=(cond,msg)=>{ console.log((cond?"  ✓ ":"  ✗ ")+msg); if(!cond) fallas++; };
 
-async function abrir(browser,{ancho=1400,alto=900,oscuro=false,api}){
- const ctx=await browser.newContext({viewport:{width:ancho,height:alto},colorScheme:oscuro?"dark":"light"});
+async function abrir(browser,{ancho=1400,alto=900,oscuro=false,api,tactil=false}){
+ const ctx=await browser.newContext({viewport:{width:ancho,height:alto},colorScheme:oscuro?"dark":"light",hasTouch:tactil,isMobile:tactil});
+ /* «Compartir» y «abrir aparte» se registran en vez de abrir nada */
+ await ctx.addInitScript(()=>{
+  window.__compartido=[]; window.__abiertos=[];
+  navigator.share=async d=>{ window.__compartido.push(d); };
+  window.open=u=>{ window.__abiertos.push(String(u)); return null; };
+ });
  await ctx.grantPermissions(["clipboard-read","clipboard-write"],{origin:new URL(URL_PAGINA).origin});
  const page=await ctx.newPage();
  const errores=[];
@@ -342,6 +348,74 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    await page.reload(); await page.waitForTimeout(600);
    const txt=await page.locator("#lista").innerText().catch(()=>"");
    ok(txt.includes("se interrumpió")&&await page.locator("[data-reintentar]").count()===1,"vuelve como interrumpido, con «Probar de nuevo»");
+   await ctx.close();
+  }
+
+ console.log("12. Fotos desde el celular: varias hojas, una lectura, y compartir");
+  {
+   const FOTOS=[path.join(__dirname,"foto-inventada-1.jpg"),path.join(__dirname,"foto-inventada-2.jpg")];
+   const UNA={matriculas:[{...RESPUESTA.matriculas[1],numero:"9990003",pagina:1}]};
+   const {ctx,page,pedidos,errores}=await abrir(browser,{ancho:390,alto:844,tactil:true,api:async r=>r.fulfill({status:200,headers:{...CORS,"content-type":"text/event-stream"},body:sse(UNA)})});
+   await cargarClave(page);
+   ok((await page.textContent("#bFoto")).includes("Sacar foto de la matrícula"),"en el celular, el botón grande es «Sacar foto»");
+   ok(await page.locator("#bGaleria").isVisible(),"y se pueden elegir fotos ya sacadas");
+   ok((await page.getAttribute("#foto","capture"))==="environment","abre la cámara de atrás");
+   await page.setInputFiles("#foto",FOTOS[0]);
+   await page.waitForSelector(".foto");
+   ok(await page.locator("#bandeja").isVisible()&&await page.locator("#bFoto").isHidden(),"la foto queda en la bandeja");
+   await page.setInputFiles("#foto",FOTOS[1]);
+   await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
+   ok((await page.textContent("#bLeerFotos")).includes("2 hojas"),"con dos hojas, «Leer esta matrícula (2 hojas)»");
+   await page.locator(".foto [data-borrar]").nth(1).click();
+   ok(await page.locator(".foto").count()===1,"se puede sacar una hoja de la bandeja");
+   await page.setInputFiles("#foto",FOTOS[1]);
+   await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
+   ok(pedidos.length===0,"no se manda nada hasta tocar «Leer»");
+   if(CAPTURAS) await page.screenshot({path:path.join(CAPTURAS,"celular-bandeja.png"),fullPage:false});
+   await page.click("#bLeerFotos");
+   await page.waitForSelector(".mat",{timeout:10000});
+   ok(pedidos.length===1,"las dos fotos van en un solo pedido");
+   const c=pedidos[0].body.messages[0].content;
+   ok(c.length===5&&c[0].text==="Hoja 1:"&&c[1].type==="image"&&c[2].text==="Hoja 2:"&&c[3].type==="image"&&c[4].type==="text","cada foto con su rótulo, y el pedido al final");
+   ok(c[1].source.media_type==="image/jpeg","van como JPEG");
+   const dims=await page.evaluate(async d=>{ const im=new Image(); im.src="data:image/jpeg;base64,"+d; await im.decode(); return [im.naturalWidth,im.naturalHeight]; },c[1].source.data);
+   const tokens=Math.ceil(dims[0]/28)*Math.ceil(dims[1]/28);
+   ok(Math.max(...dims)<=2576&&tokens<=4784&&tokens>4000,`la foto se achica justo al tope que aprovecha el modelo (${dims.join("x")}, ${tokens} tokens)`);
+   ok((await page.locator(".mat .sub").first().textContent()).includes("foto 1"),"la tarjeta dice de qué foto salió");
+   ok(await page.locator("#bandeja").isHidden()&&await page.locator("#bFoto").isVisible(),"la bandeja queda vacía para la próxima");
+   await page.locator('.mat [data-acc="compartirLetras"]').click();
+   await page.waitForTimeout(100);
+   const comp=await page.evaluate(()=>window.__compartido);
+   ok(comp.length===1&&comp[0].text.startsWith("LOTE DOCE de la MANZANA CINCO")&&!/[\u0001-\u0004]/.test(comp[0].text),"«Compartir» manda el texto en letras, sin marcas");
+   ok((await page.textContent("#estado")).includes("sin las negritas"),"y avisa que llega sin negritas");
+   await page.locator('.mat [data-acc="ver"]').click();
+   ok((await page.evaluate(()=>window.__abiertos))[0].startsWith("blob:"),"«Ver la matrícula» abre la foto");
+   ok(await sinScroll(page),"sin desborde horizontal a 390 px");
+   await page.reload(); await page.waitForSelector(".mat",{timeout:5000});
+   ok(await page.locator(".mat").count()===1,"al recargar vuelve la lectura de las fotos");
+   ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));
+   await ctx.close();
+  }
+
+  console.log("13. Fotos en la compu: se eligen o se arrastran, y se ven al lado");
+  {
+   const FOTOS=[path.join(__dirname,"foto-inventada-1.jpg"),path.join(__dirname,"foto-inventada-2.jpg")];
+   const UNA={matriculas:[{...RESPUESTA.matriculas[1],numero:"9990003",pagina:2}]};
+   const {ctx,page,pedidos,errores}=await abrir(browser,{api:async r=>r.fulfill({status:200,headers:{...CORS,"content-type":"text/event-stream"},body:sse(UNA)})});
+   await cargarClave(page);
+   ok((await page.textContent("#bFoto")).includes("Agregar fotos"),"en la compu el botón dice «Agregar fotos»");
+   await page.setInputFiles("#archivos",FOTOS[0]);
+   await page.waitForSelector(".foto");
+   ok(pedidos.length===0,"una foto arrastrada va a la bandeja, no se lee sola");
+   await page.setInputFiles("#fotosGaleria",FOTOS[1]);
+   await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
+   await page.click("#bLeerFotos");
+   await page.waitForSelector(".mat",{timeout:10000});
+   ok(await page.locator("#visorImg").isVisible()&&await page.locator("#visorPdf").isHidden(),"al lado se ve la foto, no el visor de PDF");
+   ok(/^blob:/.test(await page.getAttribute("#visorImg","src")||""),"la foto de la hoja que corresponde");
+   const nat=await page.evaluate(()=>document.querySelector("#visorImg").naturalWidth);
+   ok(nat>0,"y la imagen carga");
+   ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));
    await ctx.close();
   }
 

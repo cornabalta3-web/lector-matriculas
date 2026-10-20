@@ -26,6 +26,7 @@ pruebas/
   sin-datos-reales.js         node pruebas/sin-datos-reales.js <archivo> — que no se cuele ningún número real
   hacer-pdf-inventado.py      arma matriculas-inventadas.pdf, el PDF de mentira para la pantalla
   matriculas-inventadas.pdf
+  hacer-fotos-inventadas.py   arma foto-inventada-1.jpg y -2.jpg, dos «fotos de celular» de mentira
 ```
 
 Sin librerías, sin compilar, sin servidor. La API de Anthropic se llama con `fetch` desde el
@@ -59,6 +60,14 @@ navegador, igual que en el DDJJ, el rogador y minuta-social del SIGEC.
 - **Página web aparte**, sin el logo de la EGG: no es una herramienta de la Escribanía.
 - **Varias matrículas juntas**: varios PDF a la vez, y un PDF puede traer varias matrículas (el
   primero que trajo traía siete).
+- **Fotos con el celular** (pedido del 20/10, después de la primera versión): abre la página en el
+  celular, toca «Sacar foto», saca una foto por hoja —si la matrícula sigue en un anexo, también—
+  y toca «Leer esta matrícula»: todas las fotos van en un solo pedido, cada una rotulada («Hoja
+  1:»), y la descripción sale entera. Ella toca el botón; la cámara no dispara sola. El texto le
+  llega a la compu con «Compartir» (WhatsApp o mail), sin las negritas, y la pantalla lo avisa.
+  En la compu el mismo botón dice «Agregar fotos», y una foto arrastrada va a la bandeja.
+  La foto se achica justo al tope que aprovecha el modelo (2576 px de lado largo, 4784 tokens)
+  y no se comprime de más: la documentación avisa que la compresión fuerte arruina el texto.
 - **El PDF al lado** del texto para comparar, en pantallas anchas.
 - **Se guarda sólo la última tanda**, en el navegador, con los PDF: si cierra sin querer, vuelve.
 - **Tipos de inmueble**: lotes urbanos, propiedad horizontal y rurales.
@@ -97,12 +106,15 @@ una medida con un dígito cambiado—, la pantalla lo propone.
 1. **La primera lectura de verdad**, con la clave, en la máquina de Baltasar y después en la de
    ella. Desde la sesión no hay clave: la llamada se probó simulada (cuerpo, cabeceras, streaming,
    errores) pero nunca contra la API.
-2. **Las hojas giradas.** Las matrículas escaneadas vienen apaisadas y giradas. El modelo lee el
+2. **Las fotos de verdad**: sacarle fotos a una matrícula impresa con el celular de ella y ver
+   cómo lee —con buena luz, con sombra, torcida—. La clave tiene que estar cargada también en el
+   celular.
+3. **Las hojas giradas.** Las matrículas escaneadas vienen apaisadas y giradas. El modelo lee el
    PDF tal cual; si la lectura sale mal, el paso siguiente es girar las hojas en el navegador
    antes de mandarlas (hace falta pdf.js).
-3. **El estilo de ella**, que sale de una escritura suya con una descripción ya pasada: si pone
+4. **El estilo de ella**, que sale de una escritura suya con una descripción ya pasada: si pone
    la cifra entre paréntesis después de las letras, si los códigos de doce dígitos van en letras,
    cómo escribe los vértices mixtos (hoy «lado A-uno») y si une hectáreas y metros con «con».
-4. **Propiedad horizontal**: qué va en letras (unidad funcional, posiciones, porcentual). Hoy lo
+5. **Propiedad horizontal**: qué va en letras (unidad funcional, posiciones, porcentual). Hoy lo
    que no es medida ni superficie queda en número y se avisa.
-5. **Que Word conserve las negritas al pegar** en su computadora.
+6. **Que Word conserve las negritas al pegar** en su computadora.
