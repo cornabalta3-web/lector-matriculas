@@ -97,6 +97,9 @@ test("rural, formato viejo: en letras lo que pide el art. 54 y nada más",()=>{
  assert.ok(!r.avisos.some(a=>/Quedaron en números|designación/.test(a)),"sin avisos de más: "+r.avisos.join(" | "));
 });
 
+test("rural: la geometría dice la superficie en hectáreas, como la matrícula",()=>{
+ assert.match(M.geometria(M.limpiar(RURAL_A)).mensaje,/da 92 ha 66\d\d m²; la matrícula dice 92 ha 6626 m²\. La diferencia sale del redondeo/);
+});
 test("rural, formato nuevo",()=>{
  const r=M.procesar(RURAL_B);
  const p=plano(r.letras);
@@ -205,7 +208,7 @@ test("la geometría cierra con los tres inventados",()=>{
  const g=M.geometria(M.limpiar(RURAL_A));
  assert.equal(g.n,6);
  assert.ok(Math.abs(g.area-926626)<20,"área "+g.area);
- assert.match(M.geometria(M.limpiar(URBANO)).mensaje,/300,4\d m², que es la superficie que dice la matrícula \(300,48 m²\)/);
+ assert.match(M.geometria(M.limpiar(URBANO)).mensaje,/da 300,4\d m²; la matrícula dice 300,48 m²\. La diferencia sale del redondeo de las medidas\./);
 });
 
 test("un ángulo con un dígito de menos: lo encuentra, dice cuál es y propone el correcto",()=>{
@@ -244,7 +247,7 @@ test("la superficie mal leída en un lote urbano no sale en verde",()=>{
 test("la superficie rural que no coincide",()=>{
  const g=M.geometria(M.limpiar(RURAL_B.replace("92 Ha 6626 m²","92 Ha 6926 m²")));
  assert.equal(g.estado,"mal");
- assert.match(g.mensaje,/la matrícula dice 926\.926 m²/);
+ assert.match(g.mensaje,/la matrícula dice 92 ha 6926 m²/);
 });
 
 test("un ángulo corrido unos segundos no pasa en verde",()=>{

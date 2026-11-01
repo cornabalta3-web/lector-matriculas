@@ -461,6 +461,17 @@ function recorrer(rumbo,angs,lados,signoFijo){
 const gms=v=>{ let s=Math.round(v*3600); const d=Math.floor(s/3600); s-=d*3600; const mi=Math.floor(s/60); s-=mi*60;
  return d+"°"+String(mi).padStart(2,"0")+"'"+String(s).padStart(2,"0")+'"'; };
 const m2fmt=(v,dec)=>v.toLocaleString("es-AR",{minimumFractionDigits:dec?2:0,maximumFractionDigits:dec?2:0})+" m²";
+/* la superficie como la escribe la matrícula («92 ha 6626 m²», «300,48 m²»): dos cifras distintas,
+   una en hectáreas y otra en metros, no parecen la misma superficie aunque lo sean */
+const UNIDAD={"las hectáreas":"ha","las áreas":"a","las centiáreas":"ca","los metros cuadrados":"m²","la superficie":"m²"};
+const supComoDice=(sup,decl,dec)=>sup&&sup.partes?sup.partes.map(p=>p.txt+" "+(UNIDAD[p.q]||"m²")).join(" "):m2fmt(decl,dec);
+/* y la calculada en las mismas unidades: en hectáreas y metros si la matrícula la da así */
+const enHa=sup=>!!(sup&&sup.partes&&sup.partes[0].q==="las hectáreas");
+const areaComo=(sup,v,dec)=>{
+ if(!enHa(sup)) return m2fmt(v,dec);
+ let ha=Math.floor(v/10000), m=Math.round(v-ha*10000); if(m===10000){ ha++; m=0; }
+ return ha.toLocaleString("es-AR")+" ha "+m+" m²";
+};
 const mfmt=v=>v.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m";
 /* un número propuesto, escrito como escribe la matrícula: con o sin decimales, coma o punto
    decimal, con o sin puntos de miles */
@@ -560,14 +571,15 @@ function geometriaUna(texto,supsDadas){
   res.estado="ok";
   res.mensaje=`La geometría cierra: ${n} lados, el polígono cierra${r.cierre<0.005?" exacto":" a "+Math.round(r.cierre*100)+" cm"}`
    +(isNaN(decl)?". No encontré la superficie en la descripción, así que no la pude comparar."
-    :` y da ${m2fmt(r.area,dec)}, que es la superficie que dice la matrícula (${m2fmt(decl,dec)}).`);
+    :areaComo(sup,r.area,dec)===supComoDice(sup,decl,dec)||m2fmt(r.area,dec)===m2fmt(decl,dec)?` y da ${supComoDice(sup,decl,dec)}, la misma superficie que dice la matrícula.`
+    :` y da ${areaComo(sup,r.area,dec)}; la matrícula dice ${supComoDice(sup,decl,dec)}. La diferencia sale del redondeo de las medidas.`);
   return res;
  }
  res.estado="mal";
  const partes=[];
  if(!sumaOk) partes.push(`los ${n} ángulos suman ${gms(suma)} y tendrían que sumar ${esperada}°`);
  if(!cierraOk) partes.push(`el polígono no cierra: el último lado termina a ${mfmt(r.cierre)} de donde empezó el primero`);
- if(sumaOk&&cierraOk&&!areaOk(r.area)) res.mensaje=`La superficie no coincide: el polígono cierra, pero da ${m2fmt(r.area,dec)} y la matrícula dice ${m2fmt(decl,dec)}.`;
+ if(sumaOk&&cierraOk&&!areaOk(r.area)) res.mensaje=`La superficie no coincide: el polígono cierra, pero da ${areaComo(sup,r.area,dec)} y la matrícula dice ${supComoDice(sup,decl,dec)}.`;
  else if(partes.length) res.mensaje="La geometría no cierra: "+partes.join("; ")+".";
  else res.mensaje="Revisá los ángulos: "+res.avisos.join(" ");
  /* ¿hay un solo número que lo arregle? Se prueban las variantes de un dígito de cada número

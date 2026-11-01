@@ -111,13 +111,18 @@ button.grande{font-size:1.1rem;padding:.8rem 1.4rem;min-height:48px}
 .visor img{flex:1;min-height:0;width:100%;object-fit:contain;background:#888}
 footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 .oculto{display:none!important}
+/* en pantallas táctiles, los botones chicos también tienen el alto de un dedo */
+@media (pointer:coarse){
+ button.chico{min-height:44px;padding:.5rem 1rem;font-size:1rem}
+ .foto button{min-width:44px;min-height:44px;font-size:1.1rem}
+}
 </style>
 </head>
 <body>
 <div class="envoltura">
 <header>
  <h1>Lector de matrículas</h1>
- <p>Le sacás una foto a la matrícula, o arrastrás el PDF, y sale la descripción del inmueble, fiel y en letras, lista para pegar en Word.</p>
+ <p id="bajada">Arrastrás el PDF de la matrícula, o le sacás una foto, y sale la descripción del inmueble, fiel y en letras, lista para pegar en Word.</p>
 </header>
 
 <details class="caja clave" id="cajaClave">
@@ -126,13 +131,13 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
   <input id="clave" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de la API de Anthropic">
   <button id="bClave" class="primario" type="submit">Guardar</button>
  </form>
- <p class="nota" id="ecoClave">Se guarda sólo en esta computadora, en este navegador.</p>
+ <p class="nota" id="ecoClave">Se guarda sólo en este navegador. Te la pasa quien te mandó esta página; en el celular y en la compu se carga una vez en cada uno. Si un día dice «falta cargarla», volvé a pegarla.</p>
 </details>
 
 <div class="caja camara" id="camara">
  <button id="bFoto" class="primario grande" type="button">Sacar foto de la matrícula</button>
  <div><button id="bGaleria" class="chico oculto" type="button" style="margin-top:8px">Elegir fotos ya sacadas</button></div>
- <p class="nota" id="consejoFoto">Con buena luz, la hoja entera y derecha, sin sombra ni reflejos. Si la matrícula sigue en otra hoja (un anexo), sacale foto también antes de leer.</p>
+ <p class="nota" id="consejoFoto">Con buena luz, la hoja entera y derecha, sin sombra ni reflejos. Si la matrícula sigue atrás o en otra hoja, sacale foto también antes de leer.</p>
  <input id="foto" type="file" accept="image/*" capture="environment" hidden>
  <input id="fotosGaleria" type="file" accept="image/*" multiple hidden>
  <div id="bandeja" class="bandeja oculto">
@@ -178,6 +183,9 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 "use strict";
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+/* el celular (pantalla táctil) y la compu tienen caminos distintos: en el celular se sacan fotos
+   y se manda el texto a la compu; en la compu se arrastra el PDF y se copia con las negritas */
+const TACTIL=window.matchMedia("(pointer: coarse)").matches;
 
 /* ════════════ la clave ════════════ */
 /* Va guardada en el navegador de quien la usa y en ningún otro lado: esta página es pública
@@ -190,16 +198,20 @@ function pintarClave(){
  $("#resumenClave").textContent=hay?"Clave de la API: guardada":"Clave de la API: falta cargarla";
  $("#cajaClave").open=!hay;
 }
+/* De lo pegado se toma sólo la clave: así sirve aunque se pegue el mensaje entero de WhatsApp
+   («Ma, esta es la clave: sk-ant-…»), con espacios o con un salto de renglón. */
 $("#formClave").addEventListener("submit",e=>{
  e.preventDefault();
- const v=$("#clave").value.trim();
- if(!v){ $("#ecoClave").textContent="Pegá la clave en el campo y tocá «Guardar»."; return; }
- if(!guardarClave(v)){ $("#ecoClave").textContent="Este navegador no deja guardar datos: la clave no quedó guardada."; return; }
+ const crudo=$("#clave").value;
+ if(!crudo.trim()){ $("#ecoClave").textContent="Pegá la clave en el campo y tocá «Guardar»."; return; }
+ const m=crudo.match(/sk-ant-[A-Za-z0-9_-]{20,}/);
+ if(!m){ $("#ecoClave").textContent="Eso no parece la clave: tiene que empezar con «sk-ant-». Copiá el mensaje donde te la mandaron y pegalo acá."; return; }
+ if(!guardarClave(m[0])){ $("#ecoClave").textContent="Este navegador no deja guardar datos: la clave no quedó guardada."; return; }
  $("#clave").value="";
- $("#ecoClave").textContent="Guardada en esta computadora. Ya podés arrastrar los PDF.";
+ $("#ecoClave").textContent="Guardada en este navegador (termina en …"+m[0].slice(-4)+").";
  pintarClave();
  $("#resumenClave").focus();
- estado("Clave guardada. Ya podés arrastrar los PDF.");
+ estado(TACTIL?"Clave guardada. Ya podés sacar la foto.":"Clave guardada. Ya podés arrastrar el PDF.");
 });
 
 /* ════════════ la lectura: la API de Anthropic ════════════ */
@@ -254,11 +266,14 @@ const TOPE_IMAGEN=9.5*1024*1024;   /* y cada imagen, de 10 MB en base64 */
 /* Un error con un mensaje para ella, en castellano, y el original de la API aparte y chico */
 class ErrorLectura extends Error{ constructor(msg,detalle){ super(msg); this.detalle=detalle||""; } }
 const RED=/Failed to fetch|NetworkError|Load failed|network error|ERR_|terminated/i;
-function mensajeApi(status,tipo,txt){
- if(status===401||tipo==="authentication_error") return "La clave de la API no sirve o está vencida. Cambiala arriba, en «Clave de la API».";
+function mensajeApi(status,tipo,txt,codigo){
+ if(status===401||tipo==="authentication_error") return "La clave no anda: puede estar mal pegada o vencida. Pegala de nuevo arriba, en «Clave de la API» (tocá ese renglón para abrirlo); si sigue igual, pedí una nueva a quien te la dio.";
+ if(/anthropic-workspace-id|not scoped to a workspace/i.test(txt)) return "Esta clave no está atada a un espacio de trabajo. Quien maneja la cuenta tiene que crear una nueva adentro del espacio de la página.";
+ /* el tope de gasto del espacio o de la cuenta puede volver como 429: no se arregla esperando un minuto */
+ if(/spend_limit/i.test(codigo||"")) return "Se llegó al límite de gasto. Avisale a quien maneja la cuenta para que lo suba.";
  if(status===402||tipo==="billing_error") return "Hay un problema con el pago de la cuenta de Anthropic. Avisale a quien maneja la cuenta.";
- if(status===400&&/spend|usage limit|limit.*(reached|exceeded)|credit balance|billing/i.test(txt)) return "Se llegó al límite de gasto de esta clave. Avisale a quien maneja la cuenta para que lo suba.";
- if(status===403||tipo==="permission_error") return "La clave no tiene permiso para esto. Revisala en la consola de Anthropic.";
+ if(status===400&&/spend|usage limit|limit.*(reached|exceeded)|credit balance|billing/i.test(txt)) return "Se llegó al límite de gasto. Avisale a quien maneja la cuenta para que lo suba.";
+ if(status===403||tipo==="permission_error") return "La clave no tiene permiso para esto. Avisale a quien maneja la cuenta.";
  if(status===413||tipo==="request_too_large") return "El PDF es demasiado grande para leerlo de una vez. Partilo en dos.";
  if(status===429||tipo==="rate_limit_error") return "La API recibió demasiados pedidos seguidos. Esperá un minuto y probá de nuevo.";
  if(status===529||tipo==="overloaded_error") return "La API está saturada en este momento. Probá de nuevo en unos minutos.";
@@ -320,9 +335,9 @@ async function leerPdf(archivo,alAvanzar,signal){
   if(/fallback|anthropic-beta|beta/i.test(txt)) r=await pedir(clave,b64,false,signal);
  }
  if(!r.ok){
-  let tipo="", txt="";
-  try{ const j=await r.json(); tipo=j&&j.error&&j.error.type||""; txt=j&&j.error&&j.error.message||""; }catch(e){}
-  throw new ErrorLectura(mensajeApi(r.status,tipo,txt),"La API contestó "+r.status+(txt?": "+txt:""));
+  let tipo="", txt="", codigo="";
+  try{ const j=await r.json(); tipo=j&&j.error&&j.error.type||""; txt=j&&j.error&&j.error.message||""; codigo=j&&j.error&&j.error.details&&j.error.details.error_code||""; }catch(e){}
+  throw new ErrorLectura(mensajeApi(r.status,tipo,txt,codigo),"La API contestó "+r.status+(txt?": "+txt:""));
  }
  /* el streaming: eventos «event: …» / «data: {…}» separados por una línea en blanco. Si el
     modelo se niega a mitad y entra el respaldo, el respaldo SIGUE desde donde quedó (así lo
@@ -363,11 +378,14 @@ async function leerPdf(archivo,alAvanzar,signal){
   buf+=dec.decode();
  }catch(e){
   if(e instanceof ErrorLectura||e.name==="AbortError") throw e;
-  throw new ErrorLectura("Se cortó la conexión mientras leía. Probá de nuevo.",String(e&&e.message||e));
+  throw new ErrorLectura(TACTIL?"Se cortó mientras leía: pasa si se apaga la pantalla o te vas a otra aplicación. Tocá «Probar de nuevo» y dejá esta pantalla abierta hasta que termine."
+   :"Se cortó la conexión mientras leía. Probá de nuevo.",String(e&&e.message||e));
  }
  if(buf.trim()) evento(buf.replace(/\r\n?/g,"\n"));
- if(parada==="refusal") throw new ErrorLectura("La lectura no se completó: el modelo no quiso leer este PDF.");
- if(parada==="max_tokens") throw new ErrorLectura("El PDF trae demasiadas matrículas para una sola lectura. Partilo en partes más chicas.");
+ const fotos=archivo.tipo==="fotos";
+ if(parada==="refusal") throw new ErrorLectura("La lectura no se completó: el modelo no quiso leer "+(fotos?"estas fotos.":"este PDF."));
+ if(parada==="max_tokens") throw new ErrorLectura(fotos?"Son demasiadas hojas para una sola lectura. Leelas en dos tandas."
+  :"El PDF trae demasiadas matrículas para una sola lectura. Partilo en partes más chicas.");
  let datos=null;
  for(const intento of [json, desdeRespaldo>=0?json.slice(desdeRespaldo):null]){
   if(intento==null) continue;
@@ -375,7 +393,8 @@ async function leerPdf(archivo,alAvanzar,signal){
  }
  if(!datos) throw new ErrorLectura("La respuesta llegó incompleta. Probá de nuevo.");
  const lista=Array.isArray(datos.matriculas)?datos.matriculas:[];
- if(!lista.length) throw new ErrorLectura("No encontré ninguna matrícula en este PDF.");
+ if(!lista.length) throw new ErrorLectura(fotos?"No encontré la matrícula en estas fotos. Sacalas de nuevo con «Sacar foto de la matrícula», arriba: con buena luz, la hoja entera y que no salga movida."
+  :"No encontré ninguna matrícula en este PDF.");
  let costo=0;
  if(uso.iteraciones&&uso.iteraciones.length){
   for(const it of uso.iteraciones){
@@ -446,7 +465,7 @@ async function recuperar(){
    ARCHIVOS=v.archivos; MATS=Array.isArray(v.matriculas)?v.matriculas:[]; MATS=vivas();
    pintarTodo();
    const cortadas=ARCHIVOS.filter(a=>a.estado==="error").length;
-   estado("Se recuperó la última tanda."+(cortadas?" "+(cortadas===1?"Un PDF quedó sin leer":cortadas+" PDF quedaron sin leer")+": tocá «Probar de nuevo».":""));
+   estado("Se recuperó la última tanda."+(cortadas?" "+(cortadas===1?"Una lectura quedó sin terminar":cortadas+" lecturas quedaron sin terminar")+": tocá «Probar de nuevo».":""));
   }
  }catch(e){}
 }
@@ -493,11 +512,12 @@ function tarjeta(m){
   </div>
   <ul class="avisos" data-zona="avisos">${avisosHtml(m,p)}</ul>
   <div class="bloque">
-   <div class="rot"><h3>En letras</h3><button class="chico" data-acc="copiarLetras" aria-label="Copiar en letras: ${esc(tit)}">Copiar</button>${PUEDE_COMPARTIR?`<button class="chico" data-acc="compartirLetras" aria-label="Compartir en letras: ${esc(tit)}">Compartir</button>`:""}</div>
+   <div class="rot"><h3>En letras</h3>${PUEDE_COMPARTIR?`<button class="chico primario" data-acc="compartirLetras" aria-label="Mandar a la compu en letras: ${esc(tit)}">Mandar a la compu</button>`:""}<button class="chico" data-acc="copiarLetras" aria-label="Copiar en letras: ${esc(tit)}">Copiar</button></div>
+   ${PUEDE_COMPARTIR?'<p class="nota" style="margin:0 0 6px">Por WhatsApp o mail llega sin negritas ni subrayado: en Word, la designación va en negrita y subrayada, y la superficie en negrita.</p>':""}
    <div class="texto" data-zona="letras">${html(tramos(p.letras))}</div>
   </div>
   <div class="bloque">
-   <div class="rot"><h3>Fiel</h3><button class="chico" data-acc="copiarFiel" aria-label="Copiar la fiel: ${esc(tit)}">Copiar</button>${PUEDE_COMPARTIR?`<button class="chico" data-acc="compartirFiel" aria-label="Compartir la fiel: ${esc(tit)}">Compartir</button>`:""}
+   <div class="rot"><h3>Fiel</h3>${PUEDE_COMPARTIR?`<button class="chico" data-acc="compartirFiel" aria-label="Mandar a la compu la fiel: ${esc(tit)}">Mandar a la compu</button>`:""}<button class="chico" data-acc="copiarFiel" aria-label="Copiar la fiel: ${esc(tit)}">Copiar</button>
     <p class="nota">Si la máquina leyó mal algo, corregilo acá: la versión en letras se rehace sola.</p></div>
    <textarea class="texto" data-zona="fiel" spellcheck="false" aria-label="Descripción fiel, ${esc(tit)}"></textarea>
    <button class="chico${m.original!==m.fiel?"":" oculto"}" data-acc="restaurar" style="margin-top:6px">Volver a lo que leyó la máquina</button>
@@ -536,7 +556,7 @@ function pintarTodo(){
    a.estado==="listo"?`<button class="chico" data-quitar="${esc(a.id)}" aria-label="Quitar ${esc(a.nombre)}">Quitar</button>`:""}</div>`;
   if(a.estado==="leyendo"){
    const d=document.createElement("div"); d.className="leyendo"; d.dataset.prog=a.id; d.tabIndex=-1;
-   d.textContent=a.progreso||"Leyendo… puede tardar uno o dos minutos.";
+   d.textContent=a.progreso||"Leyendo… tarda uno o dos minutos. Dejá esta pantalla abierta hasta que termine.";
    caja.appendChild(d);
   }else if(a.estado==="error"){
    const d=document.createElement("div"); d.className="error"; d.setAttribute("role","alert");
@@ -557,6 +577,8 @@ function pintarTodo(){
  const hay=ARCHIVOS.length>0;
  $("#barra").classList.toggle("oculto",!hay);
  $("#bTodasLetras").disabled=$("#bTodasFiel").disabled=$("#bCompartirTodas").disabled=!mats.length;
+ /* en el celular, con una sola matrícula alcanza el botón de la tarjeta, que está después de los avisos */
+ if(PUEDE_COMPARTIR) $("#bCompartirTodas").classList.toggle("oculto",mats.length<2);
  $("#cuerpo").classList.toggle("con-visor",mats.length>0);
  if(mats.length&&(!ACTIVA||!mats.some(m=>m.id===ACTIVA))) activar(mats[0].id,false);
  else if(!mats.length){ ACTIVA=null; const fr=$("#visorPdf"); fr.dataset.src=""; fr.src="about:blank"; $("#visorImg").removeAttribute("src"); }
@@ -614,6 +636,7 @@ async function copiar(boton,htmlTxt,plano,dicho,{negritas=true,plural=false,pega
  const como=await alPortapapeles(htmlTxt,plano);
  const pegala=pegar||(plural?"Pegalas":"Pegala");
  const msg=!como?"No se pudo copiar. Seleccioná el texto y copialo a mano."
+  :PUEDE_COMPARTIR?dicho+" en este celular, no en la compu. Para mandarla a la compu, tocá «Mandar a la compu»."
   :como==="plano"&&negritas?dicho+", sin formato (este navegador no copia negritas). "+pegala+" en Word."
   :dicho+(negritas?" con las negritas":"")+". "+pegala+" en Word.";
  estado(msg);
@@ -625,18 +648,20 @@ function marcarBoton(boton,ok,txtOk){
  boton.textContent=ok?txtOk:"No se pudo"; boton.classList.remove("hecho","fallo"); boton.classList.add(ok?"hecho":"fallo");
  clearTimeout(boton._t); boton._t=setTimeout(()=>{ boton.textContent=txt; boton.classList.remove("hecho","fallo"); },2200);
 }
-/* En el celular, «Compartir» abre la hoja de compartir del teléfono (WhatsApp, mail…). Va el
-   texto solo: las negritas no viajan, y se avisa. */
-const PUEDE_COMPARTIR=typeof navigator!=="undefined"&&typeof navigator.share==="function";
+/* En el celular, «Mandar a la compu» abre la hoja de compartir del teléfono (WhatsApp, mail…).
+   Va el texto solo: las negritas no viajan, y la tarjeta lo dice al lado del botón. En la compu
+   no aparece, aunque Chrome y Edge de Windows también sepan compartir: ahí «Copiar» es el que
+   lleva las negritas. */
+const PUEDE_COMPARTIR=TACTIL&&typeof navigator!=="undefined"&&typeof navigator.share==="function";
 async function compartir(boton,tit,texto){
  try{
   await navigator.share({title:tit,text:texto});
   marcarBoton(boton,true,"Listo ✓");
-  estado("Compartido. Llega sin las negritas: en Word, ponéselas a la designación y a la superficie.");
+  estado("Mandada.");
  }catch(e){
   if(e&&e.name==="AbortError") return;
   marcarBoton(boton,false);
-  estado("No se pudo compartir. Probá con «Copiar».");
+  estado("No se pudo mandar. Probá de nuevo.");
  }
 }
 const parrafo=tr=>"<p>"+html(tr)+"</p>";
@@ -679,7 +704,8 @@ $("#bTodasLetras").addEventListener("click",e=>todas("letras",e.currentTarget));
 $("#bTodasFiel").addEventListener("click",e=>todas("fiel",e.currentTarget));
 $("#bCompartirTodas").addEventListener("click",e=>{
  const mats=vivas();
- compartir(e.currentTarget,"Descripciones",mats.map(m=>titulo(m)+"\n\n"+sinMarcas(proc(m).letras)).join("\n\n"));
+ compartir(e.currentTarget,"Descripciones",mats.length===1?sinMarcas(proc(mats[0]).letras)
+  :mats.map(m=>titulo(m)+"\n\n"+sinMarcas(proc(m).letras)).join("\n\n"));
 });
 
 /* ════════════ quitar y empezar de nuevo ════════════ */
@@ -691,22 +717,47 @@ function quitar(id){
  if(n&&!confirm(`Se saca «${a.nombre}» y ${n===1?"su matrícula":"sus "+n+" matrículas"} de la lista. Para volver a verlas habría que leerlo de nuevo (y pagarlo). ¿Seguro?`)) return;
  cortar(a);
  ARCHIVOS=ARCHIVOS.filter(x=>x.id!==id); MATS=MATS.filter(m=>m.archivoId!==id); soltarUrl(id);
- pintarTodo(); guardar(true); estado("Se sacó «"+a.nombre+"».");
+ pintarTodo(); guardar(true); soltarCandado(); estado("Se sacó «"+a.nombre+"».");
 }
+/* Al tocar «Leer», la bandeja desaparece y en ese lugar queda «Empezar de nuevo»: un segundo
+   toque rápido no tiene que caer acá. */
+let tLeer=0;
 $("#bLimpiar").addEventListener("click",()=>{
+ if(Date.now()-tLeer<1500) return;
  const leyendo=ARCHIVOS.filter(a=>a.estado==="leyendo").length;
  const n=vivas().length;
- if((n||leyendo)&&!confirm((n?"Se borra lo leído y habría que volver a leerlo (y pagarlo).":"")
-  +(leyendo?(n?" ":"")+(leyendo===1?"Hay una lectura en curso: se corta.":"Hay "+leyendo+" lecturas en curso: se cortan."):"")+" ¿Seguro?")) return;
+ if((n||leyendo)&&!confirm("¿Empezar de nuevo? "+(n?"Se borra lo leído y habría que volver a leerlo (y pagarlo).":"")
+  +(leyendo?(n?" ":"")+(leyendo===1?"Se corta la lectura que está en marcha.":"Se cortan las "+leyendo+" lecturas que están en marcha."):""))) return;
  ARCHIVOS.forEach(cortar);
  ARCHIVOS=[]; MATS=[]; ACTIVA=null;
  for(const id of [...urls.keys()]) soltarUrl(id);
- pintarTodo(); guardar(true); estado("Listo: la lista quedó vacía.");
+ pintarTodo(); guardar(true); soltarCandado(); estado("Listo: la lista quedó vacía.");
 });
 window.addEventListener("beforeunload",e=>{ if(ARCHIVOS.some(a=>a.estado==="leyendo")){ e.preventDefault(); e.returnValue=""; } });
 
 /* ════════════ entrar los PDF ════════════ */
+/* Mientras lee, que la pantalla no se apague: en el celular, con la pantalla apagada la lectura
+   se corta (y cada intento se cobra). Se pide antes del primer await, dentro del toque, que es
+   como lo pide Safari; si se suelta porque la página se ocultó, se vuelve a pedir al volver. */
+let CANDADO=null, PIDIENDO=false;
+function pedirCandado(){
+ try{
+  if(!navigator.wakeLock||CANDADO||PIDIENDO) return;
+  PIDIENDO=true;
+  navigator.wakeLock.request("screen").then(c=>{
+   PIDIENDO=false;
+   /* si la lectura terminó (o falló) antes de que llegara el permiso, se suelta enseguida */
+   if(!ARCHIVOS.some(a=>a.estado==="leyendo")){ c.release().catch(()=>{}); return; }
+   CANDADO=c; c.addEventListener("release",()=>{ if(CANDADO===c) CANDADO=null; });
+  },()=>{ PIDIENDO=false; });
+ }catch(e){ PIDIENDO=false; }
+}
+function soltarCandado(){
+ if(CANDADO&&!ARCHIVOS.some(a=>a.estado==="leyendo")){ const c=CANDADO; CANDADO=null; c.release().catch(()=>{}); }
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&ARCHIVOS.some(a=>a.estado==="leyendo")) pedirCandado(); });
 async function leer(a,enfocar){
+ pedirCandado();
  cortar(a);
  const ctrl=new AbortController(); a.ctrl=ctrl;
  a.estado="leyendo"; a.error=""; a.detalle=""; a.progreso="";
@@ -721,7 +772,7 @@ async function leer(a,enfocar){
   },ctrl.signal);
  }catch(e){ err=e; }
  /* si mientras tanto se quitó el archivo o se empezó de nuevo, lo que volvió no entra */
- if(a.ctrl!==ctrl||!ARCHIVOS.includes(a)) return;
+ if(a.ctrl!==ctrl||!ARCHIVOS.includes(a)){ soltarCandado(); return; }
  a.ctrl=null;
  if(err){
   a.estado="error";
@@ -744,6 +795,12 @@ async function leer(a,enfocar){
   estado("Listo: «"+a.nombre+"».");
  }
  pintarTodo(); guardar();
+ soltarCandado();
+ /* en el celular, que el resultado quede a la vista: el título, los avisos y «En letras» */
+ if(!err&&a.tipo==="fotos"){
+  const m=vivas().find(x=>x.archivoId===a.id), el=m&&document.getElementById("m-"+m.id);
+  if(el) el.scrollIntoView({block:"start",behavior:"smooth"});
+ }
 }
 const huella=f=>[f.name,f.size,f.lastModified].join("|");
 async function entrar(files){
@@ -780,7 +837,6 @@ document.addEventListener("drop",e=>{ if(e.dataTransfer&&e.dataTransfer.files.le
    según la documentación de Anthropic): se achica justo a ese tope, sin comprimirla de más,
    porque la compresión fuerte arruina la letra chica. El navegador ya la endereza según cómo
    se sacó. */
-const TACTIL=window.matchMedia("(pointer: coarse)").matches;
 const LADO_MAX=2576, PIX_MAX=4784*28*28*0.97;
 let FOTOS=[];
 function prepararFoto(file){
@@ -794,7 +850,8 @@ function prepararFoto(file){
    const c=document.createElement("canvas");
    c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(h*k));
    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
-   c.toBlob(b=>b?res(b):rej(new Error("No se pudo preparar la foto.")),"image/jpeg",0.9);
+   /* una foto de menos de 2000 px llegó achicada (WhatsApp en calidad estándar): se avisa */
+   c.toBlob(b=>b?res({blob:b,chica:Math.max(w,h)<2000}):rej(new Error("No se pudo preparar la foto.")),"image/jpeg",0.9);
   };
   img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("Ese archivo no es una foto que el navegador pueda abrir.")); };
   img.src=url;
@@ -811,14 +868,15 @@ function pintarBandeja(){
 }
 async function agregarFotos(files){
  estado(files.length===1?"Preparando la foto…":"Preparando las fotos…");
- let mal=0;
+ let mal=0, chicas=0;
  for(const f of files){
-  try{ const b=await prepararFoto(f); FOTOS.push({id:nuevoId(),blob:b,url:URL.createObjectURL(b)}); }
+  try{ const r=await prepararFoto(f); if(r.chica) chicas++; FOTOS.push({id:nuevoId(),blob:r.blob,url:URL.createObjectURL(r.blob)}); }
   catch(e){ mal++; }
  }
  pintarBandeja();
  if(mal) estado(mal===1?"Una foto no se pudo abrir: probá sacarla de nuevo.":mal+" fotos no se pudieron abrir: probá sacarlas de nuevo.");
- else estado(FOTOS.length===1?"Foto lista. Si la matrícula sigue en otra hoja, sacale foto también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
+ else if(chicas) estado((chicas===1?"Esta foto llegó achicada":"Hay "+chicas+" fotos que llegaron achicadas")+" (pasa cuando se manda por WhatsApp) y la letra chica se puede leer mal. Mejor leela desde el celular, o mandátela como documento.");
+ else estado(FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, sacale foto también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
 }
 const abrirCamara=()=>$(TACTIL?"#foto":"#fotosGaleria").click();
 $("#bFoto").addEventListener("click",abrirCamara);
@@ -828,6 +886,7 @@ $("#bGaleria").addEventListener("click",()=>$("#fotosGaleria").click());
 $("#fotos").addEventListener("click",e=>{
  const b=e.target.closest("[data-borrar]"); if(!b) return;
  const f=FOTOS.find(x=>x.id===b.dataset.borrar); if(!f) return;
+ if(!confirm("¿Sacar la hoja "+(FOTOS.indexOf(f)+1)+"?")) return;
  URL.revokeObjectURL(f.url); FOTOS=FOTOS.filter(x=>x!==f); pintarBandeja();
  estado(FOTOS.length?"Se sacó esa hoja.":"Se sacó la foto.");
 });
@@ -838,10 +897,11 @@ $("#bDescartar").addEventListener("click",()=>{
 });
 $("#bLeerFotos").addEventListener("click",()=>{
  if(!FOTOS.length) return;
+ tLeer=Date.now();
  if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
  const d=new Date(), hh=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
  const a={id:nuevoId(),tipo:"fotos",nombre:"Fotos de las "+hh+" ("+(FOTOS.length===1?"1 hoja":FOTOS.length+" hojas")+")",
-  huella:"fotos:"+nuevoId(),blobs:FOTOS.map(f=>f.blob),estado:"leyendo",progreso:"Leyendo… puede tardar uno o dos minutos."};
+  huella:"fotos:"+nuevoId(),blobs:FOTOS.map(f=>f.blob),estado:"leyendo",progreso:""};
  for(const f of FOTOS) URL.revokeObjectURL(f.url);
  FOTOS=[]; pintarBandeja();
  ARCHIVOS.push(a); pintarTodo(); guardar(true);
@@ -849,10 +909,19 @@ $("#bLeerFotos").addEventListener("click",()=>{
  leer(a);
 });
 if(TACTIL){
+ $("#bajada").textContent="Le sacás una foto a cada hoja de la matrícula y sale la descripción, fiel y en letras, para mandártela a la compu.";
  $("#soltarTit").textContent="O elegí los PDF de las matrículas";
  $("#soltarSub").textContent="Pueden ser varios, y un PDF puede traer varias matrículas.";
-}else $("#bFoto").textContent="Agregar fotos de la matrícula";
-$("#bCompartirTodas").classList.toggle("oculto",!PUEDE_COMPARTIR);
+}else{
+ $("#bajada").textContent="Arrastrá el PDF de la matrícula, tocá «Copiar» y pegalo en Word, ya con las negritas.";
+ $("#camara").before($("#soltar"));
+ const b=$("#bFoto"); b.textContent="Agregar fotos de la matrícula"; b.classList.remove("primario","grande");
+}
+if(PUEDE_COMPARTIR){
+ $("#bTodasLetras").classList.add("oculto"); $("#bTodasFiel").classList.add("oculto");
+ const b=$("#bCompartirTodas"); b.textContent="Mandar todas a la compu"; b.classList.add("primario");
+}
+$("#bCompartirTodas").classList.toggle("oculto",!PUEDE_COMPARTIR||vivas().length<2);
 pintarBandeja();
 
 pintarClave();

@@ -72,6 +72,13 @@ navegador, igual que en el DDJJ, el rogador y minuta-social del SIGEC.
   1:»), y la descripción sale entera. Ella toca el botón; la cámara no dispara sola. El texto le
   llega a la compu con «Compartir» (WhatsApp o mail), sin las negritas, y la pantalla lo avisa.
   En la compu el mismo botón dice «Agregar fotos», y una foto arrastrada va a la bandeja.
+- **Cada aparato con su camino** (revisión de facilidad del 01/11/2026, «¿es sacar foto y listo?»).
+  En el celular: la foto primero, la pantalla queda prendida mientras lee (si se apaga, la
+  lectura se corta), al terminar la lleva al resultado y el botón grande es «Mandar a la compu»,
+  con la nota de las negritas fija al lado; no están los «Copiar todas», que copian en el celular
+  y no en la compu. En la compu: el PDF primero, sólo «Copiar» (que lleva las negritas) y nada de
+  «Compartir». **Cuando hay PDF, el camino «y listo» es la compu**: arrastrar, copiar, pegar.
+  La clave se saca de lo que se pegue, aunque sea el mensaje entero de WhatsApp.
   La foto se achica justo al tope que aprovecha el modelo (2576 px de lado largo, 4784 tokens)
   y no se comprime de más: la documentación avisa que la compresión fuerte arruina el texto.
 - **El PDF al lado** del texto para comparar, en pantallas anchas.
