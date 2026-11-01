@@ -175,7 +175,7 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
  </aside>
 </div>
 
-<footer>Versión del 01/11/2026 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
+<footer>Versión del 01/11/2026, 13:44 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
 </div>
 
 <script src="motor.js"></script>
@@ -199,13 +199,18 @@ function pintarClave(){
  $("#cajaClave").open=!hay;
 }
 /* De lo pegado se toma sólo la clave: así sirve aunque se pegue el mensaje entero de WhatsApp
-   («Ma, esta es la clave: sk-ant-…»), con espacios o con un salto de renglón. */
+   («Ma, esta es la clave: sk-ant-…»), con texto o saltos de renglón alrededor. */
 $("#formClave").addEventListener("submit",e=>{
  e.preventDefault();
  const crudo=$("#clave").value;
  if(!crudo.trim()){ $("#ecoClave").textContent="Pegá la clave en el campo y tocá «Guardar»."; return; }
- const m=crudo.match(/sk-ant-[A-Za-z0-9_-]{20,}/);
- if(!m){ $("#ecoClave").textContent="Eso no parece la clave: tiene que empezar con «sk-ant-». Copiá el mensaje donde te la mandaron y pegalo acá."; return; }
+ /* una clave de Anthropic tiene unos cien caracteres después de «sk-ant-»: si es mucho más
+    corta, se cortó al copiarla (un salto de renglón en el medio, por ejemplo) */
+ const todas=crudo.match(/sk-ant-[A-Za-z0-9_-]+/g)||[];
+ if(todas.length>1){ $("#ecoClave").textContent="Hay más de una clave en lo que pegaste: pegá sólo la nueva."; return; }
+ const m=crudo.match(/sk-ant-[A-Za-z0-9_-]{80,}/);
+ if(!m){ $("#ecoClave").textContent=todas.length?"La clave parece cortada: copiá el mensaje entero donde te la mandaron y pegalo acá."
+  :"Eso no parece la clave: tiene que empezar con «sk-ant-». Copiá el mensaje donde te la mandaron y pegalo acá."; return; }
  if(!guardarClave(m[0])){ $("#ecoClave").textContent="Este navegador no deja guardar datos: la clave no quedó guardada."; return; }
  $("#clave").value="";
  $("#ecoClave").textContent="Guardada en este navegador (termina en …"+m[0].slice(-4)+").";
@@ -632,11 +637,11 @@ async function alPortapapeles(htmlTxt,plano){
   }
  }
 }
-async function copiar(boton,htmlTxt,plano,dicho,{negritas=true,plural=false,pegar}={}){
+async function copiar(boton,htmlTxt,plano,dicho,{negritas=true,plural=false,pegar,mandar=true}={}){
  const como=await alPortapapeles(htmlTxt,plano);
  const pegala=pegar||(plural?"Pegalas":"Pegala");
  const msg=!como?"No se pudo copiar. Seleccioná el texto y copialo a mano."
-  :PUEDE_COMPARTIR?dicho+" en este celular, no en la compu. Para mandarla a la compu, tocá «Mandar a la compu»."
+  :PUEDE_COMPARTIR?dicho+" en este celular, no en la compu. "+(mandar?"Para mandarla a la compu, tocá «Mandar a la compu».":pegala+" en el WhatsApp o el mail que te mandes a la compu.")
   :como==="plano"&&negritas?dicho+", sin formato (este navegador no copia negritas). "+pegala+" en Word."
   :dicho+(negritas?" con las negritas":"")+". "+pegala+" en Word.";
  estado(msg);
@@ -678,7 +683,7 @@ $("#lista").addEventListener("click",e=>{
  if(b.dataset.acc==="copiarFiel") copiar(b,parrafo(tramos(p.fielMarcado)),p.fiel,"La descripción fiel copiada");
  if(b.dataset.acc==="compartirLetras") compartir(b,titulo(m),sinMarcas(p.letras));
  if(b.dataset.acc==="compartirFiel") compartir(b,titulo(m),p.fiel);
- if(b.dataset.acc==="copiarDato"){ const d=DATOS.find(x=>x[0]===b.dataset.k); const v=m[b.dataset.k]||""; copiar(b,"<p>"+esc(v).replace(/\n/g,"<br>")+"</p>",v,d?d[2]:"El dato copiado",{negritas:false,pegar:d?d[3]:"Pegalo"}); }
+ if(b.dataset.acc==="copiarDato"){ const d=DATOS.find(x=>x[0]===b.dataset.k); const v=m[b.dataset.k]||""; copiar(b,"<p>"+esc(v).replace(/\n/g,"<br>")+"</p>",v,d?d[2]:"El dato copiado",{negritas:false,pegar:d?d[3]:"Pegalo",mandar:false}); }
  if(b.dataset.acc==="restaurar"){ m.fiel=m.original; card.querySelector("textarea").value=m.fiel; refrescar(card,m); guardar(); card.querySelector("textarea").focus(); }
 });
 /* el visor sigue a la matrícula que se está corrigiendo o copiando */
@@ -719,11 +724,11 @@ function quitar(id){
  ARCHIVOS=ARCHIVOS.filter(x=>x.id!==id); MATS=MATS.filter(m=>m.archivoId!==id); soltarUrl(id);
  pintarTodo(); guardar(true); soltarCandado(); estado("Se sacó «"+a.nombre+"».");
 }
-/* Al tocar «Leer», la bandeja desaparece y en ese lugar queda «Empezar de nuevo»: un segundo
-   toque rápido no tiene que caer acá. */
+/* Al tocar «Leer», la bandeja desaparece y lo de abajo (la zona de los PDF, «Empezar de nuevo»)
+   queda bajo el dedo: un segundo toque rápido no cuenta, caiga donde caiga. */
 let tLeer=0;
+document.addEventListener("click",e=>{ if(Date.now()-tLeer<1500){ e.stopPropagation(); e.preventDefault(); } },true);
 $("#bLimpiar").addEventListener("click",()=>{
- if(Date.now()-tLeer<1500) return;
  const leyendo=ARCHIVOS.filter(a=>a.estado==="leyendo").length;
  const n=vivas().length;
  if((n||leyendo)&&!confirm("¿Empezar de nuevo? "+(n?"Se borra lo leído y habría que volver a leerlo (y pagarlo).":"")
@@ -794,10 +799,14 @@ async function leer(a,enfocar){
   MATS=vivas().sort((p,q)=>(orden.get(p.archivoId)-orden.get(q.archivoId))||(p.pagina-q.pagina));
   estado("Listo: «"+a.nombre+"».");
  }
+ /* el salto al resultado, sólo si seguía mirando el «Leyendo…» de esta lectura: no si está
+    escribiendo, armando otra bandeja o con la cámara abierta */
+ const caja=document.querySelector(`[data-prog="${a.id}"]`), q=caja&&caja.getBoundingClientRect(), ae=document.activeElement;
+ const saltar=!document.hidden&&!!q&&q.bottom>0&&q.top<innerHeight&&!FOTOS.length&&!(ae&&/^(TEXTAREA|INPUT)$/.test(ae.tagName));
  pintarTodo(); guardar();
  soltarCandado();
- /* en el celular, que el resultado quede a la vista: el título, los avisos y «En letras» */
- if(!err&&a.tipo==="fotos"){
+ /* que el resultado quede a la vista: el título, los avisos y «En letras» */
+ if(!err&&a.tipo==="fotos"&&saltar){
   const m=vivas().find(x=>x.archivoId===a.id), el=m&&document.getElementById("m-"+m.id);
   if(el) el.scrollIntoView({block:"start",behavior:"smooth"});
  }
@@ -866,7 +875,7 @@ function pintarBandeja(){
  $("#bLeerFotos").textContent=n>1?"Leer esta matrícula ("+n+" hojas)":"Leer esta matrícula";
  $("#bOtraHoja").textContent=TACTIL?"Sacar otra hoja":"Agregar otra hoja";
 }
-async function agregarFotos(files){
+async function agregarFotos(files,deCamara=false){
  estado(files.length===1?"Preparando la foto…":"Preparando las fotos…");
  let mal=0, chicas=0;
  for(const f of files){
@@ -875,14 +884,16 @@ async function agregarFotos(files){
  }
  pintarBandeja();
  if(mal) estado(mal===1?"Una foto no se pudo abrir: probá sacarla de nuevo.":mal+" fotos no se pudieron abrir: probá sacarlas de nuevo.");
- else if(chicas) estado((chicas===1?"Esta foto llegó achicada":"Hay "+chicas+" fotos que llegaron achicadas")+" (pasa cuando se manda por WhatsApp) y la letra chica se puede leer mal. Mejor leela desde el celular, o mandátela como documento.");
+ else if(chicas) estado((chicas===1?"Esta foto tiene poca resolución":"Hay "+chicas+" fotos con poca resolución")+(deCamara?"":" (pasa con las que llegan por WhatsApp)")+" y la letra chica se puede leer mal. "
+  +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «Leer esta matrícula» igual."
+   :"Mejor sacarle la foto desde el celular, o que te la manden como documento; si no, tocá «Leer esta matrícula» igual."));
  else estado(FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, sacale foto también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
 }
 const abrirCamara=()=>$(TACTIL?"#foto":"#fotosGaleria").click();
 $("#bFoto").addEventListener("click",abrirCamara);
 $("#bOtraHoja").addEventListener("click",abrirCamara);
 $("#bGaleria").addEventListener("click",()=>$("#fotosGaleria").click());
-["#foto","#fotosGaleria"].forEach(sel=>$(sel).addEventListener("change",e=>{ const f=[...(e.target.files||[])]; e.target.value=""; if(f.length) agregarFotos(f); }));
+["#foto","#fotosGaleria"].forEach(sel=>$(sel).addEventListener("change",e=>{ const f=[...(e.target.files||[])]; e.target.value=""; if(f.length) agregarFotos(f,e.target.id==="foto"); }));
 $("#fotos").addEventListener("click",e=>{
  const b=e.target.closest("[data-borrar]"); if(!b) return;
  const f=FOTOS.find(x=>x.id===b.dataset.borrar); if(!f) return;
@@ -897,8 +908,8 @@ $("#bDescartar").addEventListener("click",()=>{
 });
 $("#bLeerFotos").addEventListener("click",()=>{
  if(!FOTOS.length) return;
- tLeer=Date.now();
  if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
+ tLeer=Date.now();
  const d=new Date(), hh=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
  const a={id:nuevoId(),tipo:"fotos",nombre:"Fotos de las "+hh+" ("+(FOTOS.length===1?"1 hoja":FOTOS.length+" hojas")+")",
   huella:"fotos:"+nuevoId(),blobs:FOTOS.map(f=>f.blob),estado:"leyendo",progreso:""};

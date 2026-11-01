@@ -57,6 +57,8 @@ function sse(obj,{parada="end_turn",corte=40}={}){
  push("message_stop",{type:"message_stop"});
  return ev.join("");
 }
+/* una clave inventada, del largo de las de verdad (unos cien caracteres después de «sk-ant-») */
+const CLAVE_PRUEBA="sk-ant-inventada-para-pruebas-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 const CORS={"access-control-allow-origin":"*","access-control-allow-headers":"*","access-control-allow-methods":"POST, OPTIONS"};
 
 let fallas=0;
@@ -93,7 +95,7 @@ async function abrir(browser,{ancho=1400,alto=900,oscuro=false,api,tactil=false}
 const sinScroll=page=>page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth);
 async function cargarClave(page){
  await page.evaluate(()=>{ document.querySelector("#cajaClave").open=true; });
- await page.fill("#clave","sk-ant-inventada-para-pruebas");
+ await page.fill("#clave",CLAVE_PRUEBA);
  await page.click("#bClave");
 }
 const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-type":"text/event-stream"},body:sse(RESPUESTA)});
@@ -120,7 +122,7 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok(p.body.stream===true&&p.body.output_config.format.type==="json_schema","streaming y respuesta con esquema");
    ok(p.body.messages[0].content[0].type==="document"&&p.body.messages[0].content[0].source.media_type==="application/pdf","el PDF va como documento");
    ok(p.body.messages[0].content[0].source.data.length>100&&!/\n/.test(p.body.messages[0].content[0].source.data),"base64 sin saltos de línea");
-   ok(p.headers["x-api-key"]==="sk-ant-inventada-para-pruebas","manda la clave cargada");
+   ok(p.headers["x-api-key"]===CLAVE_PRUEBA,"manda la clave cargada");
    ok(p.headers["anthropic-dangerous-direct-browser-access"]==="true","cabecera para el navegador");
    ok(p.headers["anthropic-beta"]==="server-side-fallback-2026-07-01"&&p.body.fallbacks==="default","respaldo si el modelo se niega");
    const t1=await page.locator(".mat").first().innerText();
@@ -272,7 +274,7 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
   {
    const {ctx,page,pedidos,errores}=await abrir(browser,{api:apiBien});
    await page.evaluate(()=>{ document.querySelector("#cajaClave").open=true; });
-   await page.fill("#clave","sk-ant-inventada-para-pruebas"); await page.press("#clave","Enter");
+   await page.fill("#clave",CLAVE_PRUEBA); await page.press("#clave","Enter");
    ok((await page.textContent("#resumenClave")).includes("guardada"),"la clave se guarda con Enter");
    await page.setInputFiles("#archivos",PDF);
    await page.waitForSelector(".mat",{timeout:10000});
@@ -369,10 +371,16 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    await page.fill("#clave","hola, esto no es");
    await page.click("#bClave");
    ok((await page.textContent("#ecoClave")).includes("Eso no parece la clave"),"si lo pegado no trae la clave, lo dice y no la guarda");
-   await page.fill("#clave","Ma, esta es la clave: sk-ant-inventada-para-pruebas \n");
+   await page.fill("#clave","sk-ant-api03-cortada-por-un-salto");
    await page.click("#bClave");
-   ok(await page.evaluate(()=>localStorage.getItem("lector_matriculas_clave"))==="sk-ant-inventada-para-pruebas","con el mensaje entero, guarda sólo la clave");
-   ok((await page.textContent("#ecoClave")).includes("termina en …ebas"),"y dice en qué termina");
+   ok((await page.textContent("#ecoClave")).includes("parece cortada"),"una clave cortada no se guarda");
+   await page.fill("#clave",CLAVE_PRUEBA+" y la vieja: "+CLAVE_PRUEBA.replace(/x/g,"y"));
+   await page.click("#bClave");
+   ok((await page.textContent("#ecoClave")).includes("más de una clave"),"con dos claves pide pegar sólo la nueva");
+   await page.fill("#clave","Ma, esta es la clave: "+CLAVE_PRUEBA+" \n");
+   await page.click("#bClave");
+   ok(await page.evaluate(()=>localStorage.getItem("lector_matriculas_clave"))===CLAVE_PRUEBA,"con el mensaje entero, guarda sólo la clave");
+   ok((await page.textContent("#ecoClave")).includes("termina en …xxxx"),"y dice en qué termina");
    ok((await page.getAttribute("#foto","capture"))==="environment","abre la cámara de atrás");
    await page.setInputFiles("#foto",FOTOS[0]);
    await page.waitForSelector(".foto");
@@ -410,6 +418,7 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok(await page.locator("#bTodasLetras").isHidden()&&await page.locator("#bCompartirTodas").isHidden(),"en el celular no están «Copiar todas», y con una sola matrícula tampoco «Mandar todas»");
    ok((await page.locator('.mat [data-acc="compartirLetras"]').textContent())==="Mandar a la compu","el botón de la tarjeta dice «Mandar a la compu»");
    ok((await page.locator(".mat .bloque .nota").first().textContent()).includes("sin negritas ni subrayado"),"y al lado dice que llega sin negritas ni subrayado");
+   await page.waitForTimeout(1000);   /* pasado el segundo y medio en que se ignora un doble toque sobre «Leer» */
    await page.locator('.mat [data-acc="compartirLetras"]').click();
    await page.waitForTimeout(100);
    const comp=await page.evaluate(()=>window.__compartido);
@@ -417,6 +426,9 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    await page.locator('.mat [data-acc="ver"]').click();
    ok((await page.evaluate(()=>window.__abiertos))[0].startsWith("blob:"),"«Ver la matrícula» abre la foto");
    ok(await sinScroll(page),"sin desborde horizontal a 390 px");
+   await page.locator(".mat details.otros summary").click();
+   await page.locator('.mat [data-acc="copiarDato"]').first().click();
+   ok(!(await page.textContent("#estado")).includes("Mandar a la compu"),"copiar un dato no manda a tocar «Mandar a la compu», que manda la descripción");
    await page.reload(); await page.waitForSelector(".mat",{timeout:5000});
    ok(await page.locator(".mat").count()===1,"al recargar vuelve la lectura de las fotos");
    ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));

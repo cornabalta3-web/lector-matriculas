@@ -100,6 +100,12 @@ test("rural, formato viejo: en letras lo que pide el art. 54 y nada más",()=>{
 test("rural: la geometría dice la superficie en hectáreas, como la matrícula",()=>{
  assert.match(M.geometria(M.limpiar(RURAL_A)).mensaje,/da 92 ha 66\d\d m²; la matrícula dice 92 ha 6626 m²\. La diferencia sale del redondeo/);
 });
+test("superficie en hectáreas, áreas y centiáreas: la calculada, en las mismas unidades",()=>{
+ const rect=(a,b,sup)=>`partiendo del vértice A con rumbo de 0°00'00" y ángulo interno de 90°00'00", lado A-B de ${a} m; desde el vértice B con ángulo interno de 90°00'00", lado B-C de ${b} m; desde el vértice C con ángulo interno de 90°00'00", lado C-D de ${a} m; desde el vértice D con ángulo interno de 90°00'00", lado D-A de ${b} m; ${sup}.`;
+ assert.match(M.geometria(M.limpiar(rect("100,00","150,27","encerrando una superficie de 1 Has 50 a 25 ca"))).mensaje,/da 1 ha 50 a 27 ca; la matrícula dice 1 ha 50 a 25 ca\./);
+ assert.match(M.geometria(M.limpiar(rect("100,00","150,27","encerrando una superficie de 1 Ha 5.025 m2"))).mensaje,/da 1 ha 5\.027 m²; la matrícula dice 1 ha 5\.025 m²\./);
+ assert.match(M.geometria(M.limpiar(rect("30,00","10,00","Superficie: 300 m²"))).mensaje,/da 300 m², la misma superficie que dice la matrícula\./);
+});
 test("rural, formato nuevo",()=>{
  const r=M.procesar(RURAL_B);
  const p=plano(r.letras);

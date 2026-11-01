@@ -470,7 +470,16 @@ const enHa=sup=>!!(sup&&sup.partes&&sup.partes[0].q==="las hectáreas");
 const areaComo=(sup,v,dec)=>{
  if(!enHa(sup)) return m2fmt(v,dec);
  let ha=Math.floor(v/10000), m=Math.round(v-ha*10000); if(m===10000){ ha++; m=0; }
- return ha.toLocaleString("es-AR")+" ha "+m+" m²";
+ const q=sup.partes.map(p=>p.q);
+ /* con áreas y centiáreas, igual que la matrícula: «1 ha 50 a 25 ca» */
+ if(q.includes("las áreas")||q.includes("las centiáreas")){
+  const dos=n=>String(n).padStart(2,"0"), a=Math.floor(m/100), ca=m%100;
+  const pa=sup.partes.find(p=>p.q==="las áreas"), pc=sup.partes.find(p=>p.q==="las centiáreas");
+  return ha.toLocaleString("es-AR")+" ha "+(pa&&pa.txt.length===2?dos(a):a)+" a "+(pc&&pc.txt.length===2?dos(ca):ca)+" ca";
+ }
+ /* los metros con punto de miles sólo si la matrícula lo pone */
+ const pm=sup.partes.find(p=>p.q==="los metros cuadrados");
+ return ha.toLocaleString("es-AR")+" ha "+(pm&&/\.\d{3}$/.test(pm.txt)?m.toLocaleString("es-AR"):m)+" m²";
 };
 const mfmt=v=>v.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m";
 /* un número propuesto, escrito como escribe la matrícula: con o sin decimales, coma o punto

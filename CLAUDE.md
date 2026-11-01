@@ -110,7 +110,9 @@ una medida con un dígito cambiado—, la pantalla lo propone.
   dudas del modelo, los `[ilegible]`, los números que quedaron sin clasificar y la geometría.
 - **No romper el foco al escribir**: corregir la fiel rehace la versión en letras en su lugar,
   sin redibujar la tarjeta.
-- **La fecha de versión al pie** («Versión del dd/mm/aaaa») se cambia a mano en `index.html`.
+- **La fecha de versión al pie** («Versión del dd/mm/aaaa») se cambia a mano en `index.html`. Si ese
+  día ya se publicó otra, va también la hora de Córdoba («Versión del 01/11/2026, 14:05»): así,
+  «¿qué dice abajo de todo?» dice si el celular tiene la versión vieja guardada.
 - **Ramas**: `main` es lo que ve ella en la página. El trabajo va en una rama y se pasa a `main`
   cuando Baltasar dice «pasalo», como en el SIGEC.
 
