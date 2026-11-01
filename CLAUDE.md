@@ -18,6 +18,7 @@ trabajan en el scratchpad de la sesión y se devuelven por el chat.
 
 ```
 index.html     La pantalla, la llamada a la API, lo que se guarda en el navegador y el portapapeles
+icono-180.png  El ícono de la pantalla de inicio del celular (lo arma pruebas/hacer-icono.py)
 motor.js       El texto: la versión fiel, el pase a letras, los avisos y la comprobación geométrica.
                No sabe nada de la pantalla ni de la API, y se prueba solo con node
 pruebas/
@@ -27,6 +28,7 @@ pruebas/
   hacer-pdf-inventado.py      arma matriculas-inventadas.pdf, el PDF de mentira para la pantalla
   matriculas-inventadas.pdf
   hacer-fotos-inventadas.py   arma foto-inventada-1.jpg y -2.jpg, dos «fotos de celular» de mentira
+  hacer-icono.py              arma icono-180.png
 ```
 
 Sin librerías, sin compilar, sin servidor. La API de Anthropic se llama con `fetch` desde el
@@ -55,8 +57,12 @@ navegador, igual que en el DDJJ, el rogador y minuta-social del SIGEC.
   negritas. Hay que probarlo en su Word.
 - **Lectura con la API** (`claude-opus-5-5`), no con OCR: los PDF que trajo son escaneos de una
   fotocopiadora, sin capa de texto. Cuesta unos centavos de dólar por matrícula.
-- **La clave es de Baltasar, pero una aparte para ella**, con su propio nombre y límite de gasto, cargada
-  una vez en su navegador. Nunca en el código: el repositorio es público.
+- **La clave es de Baltasar, pero una aparte para ella**, cargada una vez en su navegador. Nunca en
+  el código: el repositorio es público. **El límite de gasto no va en la clave sino en un espacio de
+  trabajo** (el «Default» no lo admite): un espacio «Lector de matrículas» con su límite, y la clave
+  creada adentro de ese espacio, con vencimiento «Never». Una clave que no está atada a un espacio
+  da error en cada lectura, porque la página no manda `anthropic-workspace-id` (visto en la
+  documentación el 01/11/2026).
 - **Página web aparte**, sin el logo de la EGG: no es una herramienta de la Escribanía.
 - **Varias matrículas juntas**: varios PDF a la vez, y un PDF puede traer varias matrículas (el
   primero que trajo traía siete).

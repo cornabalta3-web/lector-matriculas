@@ -6,6 +6,13 @@
 <title>Lector de matrículas</title>
 <meta name="description" content="Lee matrículas del Registro General de la Provincia de Córdoba en PDF y devuelve la descripción del inmueble, fiel y en letras, lista para pegar en Word.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='3' width='22' height='26' rx='3' fill='%23345'/%3E%3Cpath d='M10 10h12M10 15h12M10 20h8' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- el ícono de la pantalla de inicio (lo arma pruebas/hacer-icono.py). Con la línea de
+     apple-mobile-web-app-capable, el iPhone con iOS 18 o anterior abre el ícono como una
+     aplicación aparte, que guarda la clave sin el tope de siete días de Safari -->
+<link rel="apple-touch-icon" href="icono-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Matrículas">
+<meta name="theme-color" content="#2f4f6f">
 <style>
 :root{
  --bg:#f6f5f2; --card:#ffffff; --fg:#1d2329; --muted:#5d6670; --line:#dcd9d2; --soft:#efede8;
@@ -163,7 +170,7 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
  </aside>
 </div>
 
-<footer>Versión del 20/10/2026 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
+<footer>Versión del 01/11/2026 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
 </div>
 
 <script src="motor.js"></script>
