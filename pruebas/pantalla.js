@@ -363,11 +363,18 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    const FOTOS=[path.join(__dirname,"foto-inventada-1.jpg"),path.join(__dirname,"foto-inventada-2.jpg")];
    const UNA={matriculas:[{...RESPUESTA.matriculas[1],numero:"9990003",pagina:1}]};
    const {ctx,page,pedidos,errores}=await abrir(browser,{ancho:390,alto:844,tactil:true,api:async r=>r.fulfill({status:200,headers:{...CORS,"content-type":"text/event-stream"},body:sse(UNA)})});
+   const vista=()=>page.evaluate(()=>document.body.dataset.vista);
+   ok(await vista()==="clave"&&await page.locator("#cajaClave").isVisible()&&await page.locator("#camara").isHidden(),"la primera vez, sólo se ve dónde pegar la clave");
    await cargarClave(page);
-   ok((await page.textContent("#bFoto")).includes("Sacar foto de la matrícula"),"en el celular, el botón grande es «Sacar foto»");
-   ok(await page.locator("#bGaleria").isVisible(),"y se pueden elegir fotos ya sacadas");
-   /* la clave se saca de lo pegado, aunque venga el mensaje entero de WhatsApp */
-   await page.evaluate(()=>{ localStorage.removeItem("lector_matriculas_clave"); document.querySelector("#cajaClave").open=true; });
+   ok(await vista()==="inicio"&&await page.locator("#cajaClave").isHidden()&&await page.locator("#soltar").isHidden(),"con la clave guardada, se va la caja de la clave y no hay zona de PDF");
+   ok((await page.textContent("#bFoto")).includes("Sacar foto")&&await page.evaluate(()=>document.querySelector("#bFoto").classList.contains("gigante")),"en el celular, el botón gigante es «Sacar foto»");
+   const alto=await page.evaluate(()=>document.querySelector("#bFoto").getBoundingClientRect().height);
+   ok(alto>250,"y es grande de verdad ("+Math.round(alto)+" px de alto)");
+   ok(await page.locator("#bGaleria").isVisible(),"y se puede elegir del celular");
+   if(CAPTURAS) await page.screenshot({path:path.join(CAPTURAS,"celular-inicio.png"),fullPage:false});
+   /* la clave se saca de lo pegado, aunque venga el mensaje entero de WhatsApp: desde «Ajustes» */
+   await page.evaluate(()=>localStorage.removeItem("lector_matriculas_clave"));
+   await page.click("#bAjustes");
    await page.fill("#clave","hola, esto no es");
    await page.click("#bClave");
    ok((await page.textContent("#ecoClave")).includes("Eso no parece la clave"),"si lo pegado no trae la clave, lo dice y no la guarda");
@@ -387,7 +394,8 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok(await page.locator("#bandeja").isVisible()&&await page.locator("#bFoto").isHidden(),"la foto queda en la bandeja");
    await page.setInputFiles("#foto",FOTOS[1]);
    await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
-   ok((await page.textContent("#bLeerFotos")).includes("2 hojas"),"con dos hojas, «Leer esta matrícula (2 hojas)»");
+   ok((await page.textContent("#bLeerFotos")).includes("2 hojas"),"con dos hojas, «No, leer la matrícula (2 hojas)»");
+   ok(await vista()==="bandeja"&&await page.locator("#preguntaHoja").isVisible()&&await page.locator("#bFoto").isHidden(),"la bandeja pregunta si sigue en otra hoja, sin el botón de la cámara");
    page.once("dialog",d=>d.accept());
    await page.locator(".foto [data-borrar]").nth(1).click();
    ok(await page.locator(".foto").count()===1,"se puede sacar una hoja de la bandeja, preguntando antes");
@@ -409,12 +417,14 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    const tokens=Math.ceil(dims[0]/28)*Math.ceil(dims[1]/28);
    ok(Math.max(...dims)<=2576&&tokens<=4784&&tokens>4000,`la foto se achica justo al tope que aprovecha el modelo (${dims.join("x")}, ${tokens} tokens)`);
    ok((await page.locator(".mat .sub").first().textContent()).includes("foto 1"),"la tarjeta dice de qué foto salió");
-   ok(await page.locator("#bandeja").isHidden()&&await page.locator("#bFoto").isVisible(),"la bandeja queda vacía para la próxima");
+   ok(await page.locator("#bandeja").isHidden()&&(await page.locator(".foto").count())===0,"la bandeja queda vacía para la próxima");
    ok(JSON.stringify(await page.evaluate(()=>window.__candado))==='["pedido","suelto"]',"la pantalla queda prendida mientras lee, y se suelta al terminar");
    await page.waitForTimeout(700);
    const arriba=await page.evaluate(()=>document.querySelector(".mat").getBoundingClientRect().top);
    ok(arriba>=-5&&arriba<200,"al terminar, la lleva sola al resultado ("+Math.round(arriba)+" px)");
    if(CAPTURAS) await page.screenshot({path:path.join(CAPTURAS,"celular-resultado.png"),fullPage:false});
+   ok(await page.locator(".mat details.otros textarea").count()===1&&await page.locator(".mat textarea").first().isHidden(),"en el celular, la fiel queda plegada: a la vista, sólo «En letras»");
+   ok(await page.locator("#bOtra").isVisible(),"abajo, «Leer otra matrícula»");
    ok(await page.locator("#bTodasLetras").isHidden()&&await page.locator("#bCompartirTodas").isHidden(),"en el celular no están «Copiar todas», y con una sola matrícula tampoco «Mandar todas»");
    ok((await page.locator('.mat [data-acc="compartirLetras"]').textContent())==="Mandar a la compu","el botón de la tarjeta dice «Mandar a la compu»");
    ok((await page.locator(".mat .bloque .nota").first().textContent()).includes("sin negritas ni subrayado"),"y al lado dice que llega sin negritas ni subrayado");
@@ -426,9 +436,11 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    await page.locator('.mat [data-acc="ver"]').click();
    ok((await page.evaluate(()=>window.__abiertos))[0].startsWith("blob:"),"«Ver la matrícula» abre la foto");
    ok(await sinScroll(page),"sin desborde horizontal a 390 px");
-   await page.locator(".mat details.otros summary").click();
+   await page.locator(".mat details.otros summary",{hasText:"otros datos"}).click();
    await page.locator('.mat [data-acc="copiarDato"]').first().click();
    ok(!(await page.textContent("#estado")).includes("Mandar a la compu"),"copiar un dato no manda a tocar «Mandar a la compu», que manda la descripción");
+   await page.click("#bOtra");
+   ok(await vista()==="inicio"&&await page.locator("#bFoto").isVisible()&&await page.locator(".mat").first().isHidden(),"«Leer otra matrícula» vuelve al botón gigante");
    await page.reload(); await page.waitForSelector(".mat",{timeout:5000});
    ok(await page.locator(".mat").count()===1,"al recargar vuelve la lectura de las fotos");
    ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));

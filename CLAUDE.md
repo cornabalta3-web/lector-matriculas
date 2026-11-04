@@ -79,6 +79,14 @@ navegador, igual que en el DDJJ, el rogador y minuta-social del SIGEC.
   y no en la compu. En la compu: el PDF primero, sólo «Copiar» (que lleva las negritas) y nada de
   «Compartir». **Cuando hay PDF, el camino «y listo» es la compu**: arrastrar, copiar, pegar.
   La clave se saca de lo que se pegue, aunque sea el mensaje entero de WhatsApp.
+- **A prueba de dummies: una cosa por pantalla** (Baltasar, 04/11/2026: «hoy abro y es un
+  quilombo»). Cuatro vistas, según `data-vista` en el body: **clave** (sólo pegar la clave, la
+  primera vez), **inicio** (en el celular, el botón gigante «Sacar foto» y «Elegir del celular»;
+  en la compu, el PDF gigante), **bandeja** (las fotos y «¿La matrícula sigue atrás o en otra
+  hoja?»: Sí / No, leer) y **resultado** (la rueda mientras lee; después, «En letras» con su
+  botón, y la fiel y los otros datos plegados en el celular; abajo, «Leer otra matrícula»). La
+  clave y lo que cuesta quedan en «Ajustes», en el pie. **Lo de mandar por WhatsApp es para
+  después** (04/11).
   La foto se achica justo al tope que aprovecha el modelo (2576 px de lado largo, 4784 tokens)
   y no se comprime de más: la documentación avisa que la compresión fuerte arruina el texto.
 - **El PDF al lado** del texto para comparar, en pantallas anchas.

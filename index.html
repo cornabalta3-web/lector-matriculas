@@ -111,6 +111,46 @@ button.grande{font-size:1.1rem;padding:.8rem 1.4rem;min-height:48px}
 .visor img{flex:1;min-height:0;width:100%;object-fit:contain;background:#888}
 footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 .oculto{display:none!important}
+/* Una cosa por pantalla. La página tiene cuatro vistas (data-vista en el body): «clave», sólo
+   para pegar la clave la primera vez; «inicio», el botón gigante; «bandeja», las fotos sacadas
+   y la pregunta de si falta otra hoja; y «resultado», lo leído (y lo que se está leyendo). */
+body[data-vista="clave"] #camara,body[data-vista="clave"] #soltar,body[data-vista="clave"] #barra,body[data-vista="clave"] #cuerpo,body[data-vista="clave"] #otra{display:none}
+body[data-vista="inicio"] #barra,body[data-vista="inicio"] #cuerpo,body[data-vista="inicio"] #otra{display:none}
+body[data-vista="bandeja"] #soltar,body[data-vista="bandeja"] #barra,body[data-vista="bandeja"] #cuerpo,body[data-vista="bandeja"] #otra{display:none}
+body[data-vista="resultado"] #camara{display:none}
+body:not([data-vista="clave"]):not(.ajustes) #cajaClave{display:none}
+body[data-vista="clave"] #resumenClave{display:none}
+body:not([data-vista="clave"]) .paso{display:none}
+body:not([data-vista="inicio"]) #bajada{display:none}
+body[data-vista="bandeja"] #consejoFoto{display:none}
+.paso{font-size:1.1rem;font-weight:600;margin:0 0 4px}
+/* en el celular no hay zona de PDF: «Elegir del celular» abre fotos y PDF juntos */
+body.tactil #soltar{display:none}
+body.tactil #bajada{display:none}
+/* el botón gigante */
+button.gigante{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;width:100%;min-height:38vh;font-size:1.5rem;font-weight:700;border-radius:20px}
+button.gigante svg{width:72px;height:72px}
+button.enlace{background:none;border:0;color:var(--accent);text-decoration:underline;font-weight:600;padding:.4rem .2rem;min-height:44px}
+.camara .nota{font-size:.95rem}
+.pregunta{font-size:1.15rem;font-weight:700;margin:14px 0 0}
+.bandeja .fila{flex-direction:column;align-items:stretch;max-width:420px;margin-left:auto;margin-right:auto}
+.bandeja .fila button{min-height:52px;font-size:1.05rem}
+.foto{width:140px}
+.foto img{height:180px}
+/* la compu: el PDF gigante al empezar, y una franja para soltar otro cuando ya hay lecturas */
+body:not(.tactil)[data-vista="inicio"] #soltar{padding:12vh 16px}
+body:not(.tactil)[data-vista="inicio"] #soltar strong{font-size:1.5rem}
+body:not(.tactil)[data-vista="resultado"] #soltar{padding:10px 16px}
+body:not(.tactil)[data-vista="resultado"] #soltar .nota,body:not(.tactil)[data-vista="resultado"] #soltarSub{display:none}
+body:not(.tactil) #otra{display:none}
+/* leyendo: una rueda grande, para que se note que está trabajando */
+.leyendo{text-align:center;font-size:1.05rem;padding:22px 16px}
+.leyendo::before{content:"";display:block;width:56px;height:56px;margin:4px auto 14px;border-radius:50%;border:6px solid var(--soft);border-top-color:var(--accent);animation:gira 1.1s linear infinite}
+@keyframes gira{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.leyendo::before{animation:none}}
+.otra{margin-top:18px;text-align:center}
+.otra button{width:100%;max-width:420px}
+footer .enlace{font-size:.95rem}
 /* en pantallas táctiles, los botones chicos también tienen el alto de un dedo */
 @media (pointer:coarse){
  button.chico{min-height:44px;padding:.5rem 1rem;font-size:1rem}
@@ -127,25 +167,28 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 
 <details class="caja clave" id="cajaClave">
  <summary id="resumenClave">Clave de la API</summary>
+ <p class="paso" id="pasoClave">Para empezar, pegá acá la clave que te mandaron y tocá «Guardar». Se hace una sola vez.</p>
  <form class="fila" id="formClave" autocomplete="off">
   <input id="clave" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de la API de Anthropic">
   <button id="bClave" class="primario" type="submit">Guardar</button>
  </form>
  <p class="nota" id="ecoClave">Se guarda sólo en este navegador. Te la pasa quien te mandó esta página; en el celular y en la compu se carga una vez en cada uno. Si un día dice «falta cargarla», volvé a pegarla.</p>
+ <p class="nota">Las fotos y los PDF se mandan a Anthropic para leerlos, y cada lectura cuesta unos centavos de dólar por matrícula. Lo que lee la máquina hay que compararlo con la matrícula.</p>
 </details>
 
 <div class="caja camara" id="camara">
  <button id="bFoto" class="primario grande" type="button">Sacar foto de la matrícula</button>
- <div><button id="bGaleria" class="chico oculto" type="button" style="margin-top:8px">Elegir fotos ya sacadas</button></div>
- <p class="nota" id="consejoFoto">Con buena luz, la hoja entera y derecha, sin sombra ni reflejos. Si la matrícula sigue atrás o en otra hoja, sacale foto también antes de leer.</p>
+ <p class="nota" id="consejoFoto">Una foto por hoja, con buena luz y la hoja entera.</p>
+ <div><button id="bGaleria" class="enlace oculto" type="button">Elegir del celular (fotos o PDF)</button></div>
  <input id="foto" type="file" accept="image/*" capture="environment" hidden>
  <input id="fotosGaleria" type="file" accept="image/*" multiple hidden>
  <div id="bandeja" class="bandeja oculto">
   <div class="fotos" id="fotos" aria-live="polite"></div>
+  <p class="pregunta" id="preguntaHoja">¿La matrícula sigue atrás o en otra hoja?</p>
   <div class="fila">
-   <button id="bOtraHoja" type="button">Sacar otra hoja</button>
-   <button id="bLeerFotos" class="primario" type="button">Leer esta matrícula</button>
-   <button id="bDescartar" type="button">Descartar las fotos</button>
+   <button id="bOtraHoja" type="button">Sí, sacar otra hoja</button>
+   <button id="bLeerFotos" class="primario" type="button">No, leer la matrícula</button>
+   <button id="bDescartar" class="enlace" type="button">Descartar las fotos</button>
   </div>
  </div>
 </div>
@@ -153,7 +196,6 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 <div class="soltar" id="soltar" role="button" tabindex="0" aria-label="Elegir los PDF de las matrículas">
  <strong id="soltarTit">Arrastrá acá los PDF de las matrículas</strong><br>
  <span id="soltarSub">o tocá para elegirlos. Pueden ser varios, y un PDF puede traer varias matrículas.</span>
- <p class="nota">Las fotos y los PDF se mandan a Anthropic para leerlos, y cada lectura se cobra: unos centavos de dólar por matrícula. Lo que lee la máquina hay que compararlo con la matrícula.</p>
  <input id="archivos" type="file" accept="application/pdf,.pdf,image/*" multiple hidden>
 </div>
 
@@ -175,7 +217,9 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
  </aside>
 </div>
 
-<footer>Versión del 01/11/2026, 13:44 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
+<div class="otra" id="otra"><button id="bOtra" class="grande" type="button">Leer otra matrícula</button></div>
+
+<footer><button id="bAjustes" class="enlace" type="button">Ajustes</button><br>Versión del 04/11/2026 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
 </div>
 
 <script src="motor.js"></script>
@@ -186,6 +230,14 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 /* el celular (pantalla táctil) y la compu tienen caminos distintos: en el celular se sacan fotos
    y se manda el texto a la compu; en la compu se arrastra el PDF y se copia con las negritas */
 const TACTIL=window.matchMedia("(pointer: coarse)").matches;
+document.body.classList.toggle("tactil",TACTIL);
+/* qué pantalla se ve: sin clave, la clave; con fotos sacadas, la bandeja; con lecturas, el
+   resultado, salvo que haya tocado «Leer otra matrícula»; si no, el inicio */
+let EN_INICIO=false;
+function pintarVista(){
+ const v=!leerClave()?"clave":FOTOS.length?"bandeja":(ARCHIVOS.length&&!EN_INICIO)?"resultado":"inicio";
+ if(document.body.dataset.vista!==v){ document.body.dataset.vista=v; if(v!=="resultado") window.scrollTo(0,0); }
+}
 
 /* ════════════ la clave ════════════ */
 /* Va guardada en el navegador de quien la usa y en ningún otro lado: esta página es pública
@@ -196,8 +248,15 @@ function guardarClave(v){ try{ v?localStorage.setItem(CLAVE_KEY,v):localStorage.
 function pintarClave(){
  const hay=!!leerClave();
  $("#resumenClave").textContent=hay?"Clave de la API: guardada":"Clave de la API: falta cargarla";
- $("#cajaClave").open=!hay;
+ $("#cajaClave").open=!hay||document.body.classList.contains("ajustes");
+ pintarVista();
 }
+/* «Ajustes», en el pie: la clave y lo que cuesta, que no hacen falta todos los días */
+$("#bAjustes").addEventListener("click",()=>{
+ const ab=document.body.classList.toggle("ajustes");
+ $("#cajaClave").open=ab||!leerClave();
+ if(ab){ window.scrollTo(0,0); $("#resumenClave").focus(); }
+});
 /* De lo pegado se toma sólo la clave: así sirve aunque se pegue el mensaje entero de WhatsApp
    («Ma, esta es la clave: sk-ant-…»), con texto o saltos de renglón alrededor. */
 $("#formClave").addEventListener("submit",e=>{
@@ -214,6 +273,7 @@ $("#formClave").addEventListener("submit",e=>{
  if(!guardarClave(m[0])){ $("#ecoClave").textContent="Este navegador no deja guardar datos: la clave no quedó guardada."; return; }
  $("#clave").value="";
  $("#ecoClave").textContent="Guardada en este navegador (termina en …"+m[0].slice(-4)+").";
+ document.body.classList.remove("ajustes");
  pintarClave();
  $("#resumenClave").focus();
  estado(TACTIL?"Clave guardada. Ya podés sacar la foto.":"Clave guardada. Ya podés arrastrar el PDF.");
@@ -521,12 +581,12 @@ function tarjeta(m){
    ${PUEDE_COMPARTIR?'<p class="nota" style="margin:0 0 6px">Por WhatsApp o mail llega sin negritas ni subrayado: en Word, la designación va en negrita y subrayada, y la superficie en negrita.</p>':""}
    <div class="texto" data-zona="letras">${html(tramos(p.letras))}</div>
   </div>
-  <div class="bloque">
+  ${TACTIL?'<details class="otros"><summary>La versión fiel, para corregir</summary>':""}<div class="bloque">
    <div class="rot"><h3>Fiel</h3>${PUEDE_COMPARTIR?`<button class="chico" data-acc="compartirFiel" aria-label="Mandar a la compu la fiel: ${esc(tit)}">Mandar a la compu</button>`:""}<button class="chico" data-acc="copiarFiel" aria-label="Copiar la fiel: ${esc(tit)}">Copiar</button>
     <p class="nota">Si la máquina leyó mal algo, corregilo acá: la versión en letras se rehace sola.</p></div>
    <textarea class="texto" data-zona="fiel" spellcheck="false" aria-label="Descripción fiel, ${esc(tit)}"></textarea>
    <button class="chico${m.original!==m.fiel?"":" oculto"}" data-acc="restaurar" style="margin-top:6px">Volver a lo que leyó la máquina</button>
-  </div>
+  </div>${TACTIL?"</details>":""}
   <details class="otros"><summary>Los otros datos de la matrícula</summary>
    ${DATOS.filter(([k])=>m[k]).map(([k,r])=>`<div class="dato"><div class="rot"><b>${esc(r)}</b><button class="chico" data-acc="copiarDato" data-k="${k}" aria-label="Copiar ${esc(r.toLowerCase())}: ${esc(tit)}">Copiar</button></div><pre>${esc(m[k])}</pre></div>`).join("")||'<p class="nota">No trae otros datos.</p>'}
   </details>`;
@@ -580,7 +640,10 @@ function pintarTodo(){
   const d=ancla.getBoundingClientRect().top-arriba; if(Math.abs(d)>1) window.scrollBy(0,d);
  }
  const hay=ARCHIVOS.length>0;
- $("#barra").classList.toggle("oculto",!hay);
+ if(!hay) EN_INICIO=false;
+ pintarVista();
+ /* en el celular, mientras sólo se está leyendo, la pantalla muestra la rueda y nada más */
+ $("#barra").classList.toggle("oculto",TACTIL?!mats.length:!hay);
  $("#bTodasLetras").disabled=$("#bTodasFiel").disabled=$("#bCompartirTodas").disabled=!mats.length;
  /* en el celular, con una sola matrícula alcanza el botón de la tarjeta, que está después de los avisos */
  if(PUEDE_COMPARTIR) $("#bCompartirTodas").classList.toggle("oculto",mats.length<2);
@@ -763,6 +826,7 @@ function soltarCandado(){
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&ARCHIVOS.some(a=>a.estado==="leyendo")) pedirCandado(); });
 async function leer(a,enfocar){
  pedirCandado();
+ EN_INICIO=false;
  cortar(a);
  const ctrl=new AbortController(); a.ctrl=ctrl;
  a.estado="leyendo"; a.error=""; a.detalle=""; a.progreso="";
@@ -872,8 +936,9 @@ function pintarBandeja(){
  $("#bFoto").classList.toggle("oculto",!!n);
  $("#bGaleria").classList.toggle("oculto",!TACTIL||!!n);
  $("#fotos").innerHTML=FOTOS.map((f,i)=>`<div class="foto"><img src="${f.url}" alt="Hoja ${i+1}"><span>Hoja ${i+1}</span><button type="button" data-borrar="${f.id}" aria-label="Sacar la hoja ${i+1}">✕</button></div>`).join("");
- $("#bLeerFotos").textContent=n>1?"Leer esta matrícula ("+n+" hojas)":"Leer esta matrícula";
- $("#bOtraHoja").textContent=TACTIL?"Sacar otra hoja":"Agregar otra hoja";
+ $("#bLeerFotos").textContent=TACTIL?(n>1?"No, leer la matrícula ("+n+" hojas)":"No, leer la matrícula"):(n>1?"Leer esta matrícula ("+n+" hojas)":"Leer esta matrícula");
+ $("#bOtraHoja").textContent=TACTIL?"Sí, sacar otra hoja":"Agregar otra hoja";
+ pintarVista();
 }
 async function agregarFotos(files,deCamara=false){
  estado(files.length===1?"Preparando la foto…":"Preparando las fotos…");
@@ -887,12 +952,13 @@ async function agregarFotos(files,deCamara=false){
  else if(chicas) estado((chicas===1?"Esta foto tiene poca resolución":"Hay "+chicas+" fotos con poca resolución")+(deCamara?"":" (pasa con las que llegan por WhatsApp)")+" y la letra chica se puede leer mal. "
   +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «Leer esta matrícula» igual."
    :"Mejor sacarle la foto desde el celular, o que te la manden como documento; si no, tocá «Leer esta matrícula» igual."));
- else estado(FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, sacale foto también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
+ /* en el celular la bandeja ya pregunta si falta otra hoja: no hace falta decirlo dos veces */
+ else estado(TACTIL?"":FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, agregala también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
 }
 const abrirCamara=()=>$(TACTIL?"#foto":"#fotosGaleria").click();
 $("#bFoto").addEventListener("click",abrirCamara);
 $("#bOtraHoja").addEventListener("click",abrirCamara);
-$("#bGaleria").addEventListener("click",()=>$("#fotosGaleria").click());
+$("#bGaleria").addEventListener("click",()=>$("#archivos").click());
 ["#foto","#fotosGaleria"].forEach(sel=>$(sel).addEventListener("change",e=>{ const f=[...(e.target.files||[])]; e.target.value=""; if(f.length) agregarFotos(f,e.target.id==="foto"); }));
 $("#fotos").addEventListener("click",e=>{
  const b=e.target.closest("[data-borrar]"); if(!b) return;
@@ -919,17 +985,24 @@ $("#bLeerFotos").addEventListener("click",()=>{
  const caja=document.querySelector(`[data-archivo="${a.id}"]`); if(caja) caja.scrollIntoView({block:"start",behavior:"smooth"});
  leer(a);
 });
+$("#bOtra").addEventListener("click",()=>{ EN_INICIO=true; pintarVista(); });
 if(TACTIL){
+ $("#bFoto").classList.add("gigante");
+ $("#bFoto").innerHTML='<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="16" width="52" height="38" rx="8" fill="none" stroke="currentColor" stroke-width="4"/><path d="M22 16l4-7h12l4 7" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="35" r="10" fill="none" stroke="currentColor" stroke-width="4"/></svg>Sacar foto';
  $("#bajada").textContent="Le sacás una foto a cada hoja de la matrícula y sale la descripción, fiel y en letras, para mandártela a la compu.";
  $("#soltarTit").textContent="O elegí los PDF de las matrículas";
  $("#soltarSub").textContent="Pueden ser varios, y un PDF puede traer varias matrículas.";
 }else{
  $("#bajada").textContent="Arrastrá el PDF de la matrícula, tocá «Copiar» y pegalo en Word, ya con las negritas.";
  $("#camara").before($("#soltar"));
- const b=$("#bFoto"); b.textContent="Agregar fotos de la matrícula"; b.classList.remove("primario","grande");
+ const b=$("#bFoto"); b.textContent="Agregar fotos de la matrícula"; b.classList.remove("primario","grande"); b.classList.add("enlace");
+ $("#consejoFoto").textContent="Si en vez del PDF tenés fotos de la matrícula.";
+ $("#soltarTit").textContent="Arrastrá acá el PDF de la matrícula";
+ $("#soltarSub").textContent="o hacé clic para elegirlo. Pueden ser varios.";
 }
+/* en el celular, los «Copiar todas» copian en el celular y no en la compu: no van */
+if(TACTIL){ $("#bTodasLetras").classList.add("oculto"); $("#bTodasFiel").classList.add("oculto"); }
 if(PUEDE_COMPARTIR){
- $("#bTodasLetras").classList.add("oculto"); $("#bTodasFiel").classList.add("oculto");
  const b=$("#bCompartirTodas"); b.textContent="Mandar todas a la compu"; b.classList.add("primario");
 }
 $("#bCompartirTodas").classList.toggle("oculto",!PUEDE_COMPARTIR||vivas().length<2);
