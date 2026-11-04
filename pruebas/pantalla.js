@@ -466,8 +466,19 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok(!(await page.textContent("#estado")).includes("Mandar a la compu"),"copiar un dato no manda a tocar «Mandar a la compu», que manda la descripción");
    await page.click("#bOtra");
    ok(await vista()==="inicio"&&await page.locator("#bFoto").isVisible()&&await page.locator(".mat").first().isHidden(),"«Leer otra matrícula» vuelve al botón gigante");
-   await page.reload(); await page.waitForSelector(".mat",{timeout:5000});
-   ok(await page.locator(".mat").count()===1,"al recargar vuelve la lectura de las fotos");
+   ok(await page.locator("#bVolver").isVisible()&&(await page.textContent("#bVolver"))==="Ver lo leído","y desde ahí se puede volver a lo leído");
+   /* la segunda lectura, después de «Leer otra matrícula»: la nueva arriba y a la vista */
+   await page.click("#bFoto").catch(()=>{});
+   await page.setInputFiles("#foto",FOTOS[0]); await enRevisar(); await page.click("#bUsar");
+   await page.waitForSelector(".foto"); await page.waitForTimeout(1600);
+   await page.click("#bLeerFotos");
+   await page.waitForFunction(()=>document.querySelectorAll(".mat").length===2,null,{timeout:10000}); await page.waitForTimeout(800);
+   const primera=await page.evaluate(()=>{ const m=document.querySelector(".mat"); return {n:m.querySelector("h2").textContent,top:m.getBoundingClientRect().top}; });
+   ok(await vista()==="resultado"&&primera.top>-5&&primera.top<300,"la lectura nueva queda arriba de todo y a la vista ("+Math.round(primera.top)+" px)");
+   await page.reload(); await page.waitForTimeout(800);
+   ok(await vista()==="inicio"&&await page.locator("#bFoto").isVisible()&&await page.locator("#bVolver").isVisible(),"al abrir otro día, el botón gigante, y lo de antes en «Ver lo leído»");
+   await page.click("#bVolver");
+   ok(await page.locator(".mat").count()===2&&await page.locator(".mat").first().isVisible(),"«Ver lo leído» muestra las lecturas guardadas");
    ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));
    await ctx.close();
   }
@@ -496,6 +507,60 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok(/^blob:/.test(await page.getAttribute("#visorImg","src")||""),"la foto de la hoja que corresponde");
    const nat=await page.evaluate(()=>document.querySelector("#visorImg").naturalWidth);
    ok(nat>0,"y la imagen carga");
+   ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));
+   await ctx.close();
+  }
+
+ console.log("14. Lo que podía trabarla en el celular: la clave mala, cancelar, fotos sin matrícula, la bandeja al recargar, una lectura colgada");
+  {
+   const FOTO=path.join(__dirname,"foto-inventada-1.jpg");
+   const UNA={matriculas:[{...RESPUESTA.matriculas[1],numero:"9990005",pagina:1}]};
+   const sseBien=r=>r.fulfill({status:200,headers:{...CORS,"content-type":"text/event-stream"},body:sse(UNA)});
+   let modo="401";
+   const {ctx,page,pedidos,errores}=await abrir(browser,{ancho:390,alto:844,tactil:true,api:async r=>{
+    if(modo==="401") return r.fulfill({status:401,headers:{...CORS,"content-type":"application/json"},body:JSON.stringify({type:"error",error:{type:"authentication_error",message:"invalid x-api-key"}})});
+    if(modo==="vacio") return r.fulfill({status:200,headers:{...CORS,"content-type":"text/event-stream"},body:sse({matriculas:[]})});
+    if(modo==="nunca") return;   /* no contesta */
+    return sseBien(r);
+   }});
+   await ctx.addInitScript(()=>{ window.__vigiaMs=1500; });
+   await cargarClave(page);
+   const vista=()=>page.evaluate(()=>document.body.dataset.vista);
+   const unaFoto=async()=>{ await page.setInputFiles("#foto",FOTO); await page.waitForFunction(()=>document.body.dataset.vista==="foto"&&document.querySelector("#revisarImg").naturalWidth>0); await page.click("#bUsar"); await page.waitForSelector(".foto"); await page.waitForTimeout(1600); };
+   /* la clave mala: se abre sola la caja, y al guardar la nueva se relee sola */
+   await unaFoto(); await page.click("#bLeerFotos");
+   await page.waitForSelector("[data-clave]",{timeout:10000});
+   ok(await page.locator("#cajaClave").isVisible()&&await page.locator("[data-reintentar]").count()===0,"con la clave mala, la caja de la clave se abre sola arriba, con «Pegar la clave de nuevo»");
+   modo="bien";
+   await page.waitForTimeout(1600);   /* pegar la clave lleva más que el segundo y medio en que se ignora un doble toque */
+   await page.fill("#clave",CLAVE_PRUEBA); await page.click("#bClave");
+   await page.waitForSelector(".mat",{timeout:10000});
+   ok(await page.locator(".mat").count()===1&&await page.locator("#cajaClave").isHidden(),"al guardar la clave nueva, vuelve a leer sola y se cierra la caja");
+   /* fotos sin matrícula: el botón es sacarlas de nuevo, no reintentar con las mismas */
+   await page.waitForTimeout(1600);
+   await page.click("#bOtra"); modo="vacio";
+   await unaFoto(); await page.click("#bLeerFotos");
+   await page.waitForSelector("[data-rehacer]",{timeout:10000});
+   ok((await page.textContent(".error")).includes("Sacar las fotos de nuevo")&&await page.locator(".error [data-reintentar]").count()===0,"fotos sin matrícula: «Sacar las fotos de nuevo», sin «Probar de nuevo»");
+   await page.waitForTimeout(1600);
+   await page.locator(".error [data-quitar]").click();
+   /* cancelar una lectura en marcha: las fotos vuelven a la bandeja */
+   modo="nunca";
+   await page.waitForTimeout(400);
+   if(await vista()!=="inicio"){ await page.click("#bOtra").catch(()=>{}); }
+   await unaFoto(); await page.click("#bLeerFotos");
+   await page.waitForSelector("[data-cancelar]"); await page.waitForTimeout(1600);
+   await page.click("[data-cancelar]");
+   ok(await vista()==="bandeja"&&await page.locator(".foto").count()===1,"«Cancelar» corta la lectura y las fotos vuelven a la bandeja");
+   /* la bandeja sobrevive a una recarga (como cuando el teléfono cierra la página al abrir la cámara) */
+   await page.waitForTimeout(300);
+   await page.reload(); await page.waitForFunction(()=>document.body.dataset.vista==="bandeja",null,{timeout:5000}).catch(()=>{});
+   ok(await vista()==="bandeja"&&await page.locator(".foto").count()===1&&(await page.textContent("#estado")).includes("Volvió la hoja"),"al recargar, la hoja que no se había leído sigue en la bandeja");
+   /* una lectura que se cuelga no deja la rueda para siempre */
+   await page.waitForTimeout(1600);
+   await page.click("#bLeerFotos");
+   await page.waitForSelector(".error",{timeout:8000});
+   ok((await page.textContent(".error")).includes("se quedó trabada")&&await page.locator(".error [data-reintentar]").count()===1,"una lectura colgada cae sola en «Probar de nuevo»");
    ok(errores.length===0,"sin errores de JavaScript"+(errores.length?": "+errores.join(" | "):""));
    await ctx.close();
   }

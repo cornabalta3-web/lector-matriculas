@@ -117,7 +117,9 @@ footer{margin-top:30px;color:var(--muted);font-size:.85rem;text-align:center}
 body[data-vista="clave"] #camara,body[data-vista="clave"] #soltar,body[data-vista="clave"] #barra,body[data-vista="clave"] #cuerpo,body[data-vista="clave"] #otra{display:none}
 body[data-vista="inicio"] #barra,body[data-vista="inicio"] #cuerpo,body[data-vista="inicio"] #otra{display:none}
 body[data-vista="bandeja"] #soltar,body[data-vista="bandeja"] #barra,body[data-vista="bandeja"] #cuerpo,body[data-vista="bandeja"] #otra{display:none}
-body[data-vista="resultado"] #camara{display:none}
+body.tactil[data-vista="resultado"] #camara{display:none}
+body[data-vista="clave"] #bAjustes{display:none}
+.leyendo .chico{margin-top:10px}
 body:not([data-vista="clave"]):not(.ajustes) #cajaClave{display:none}
 body[data-vista="clave"] #resumenClave{display:none}
 body:not([data-vista="clave"]) .paso{display:none}
@@ -188,7 +190,7 @@ body[data-vista="foto"] #camara,body[data-vista="foto"] #soltar,body[data-vista=
   <input id="clave" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de la API de Anthropic">
   <button id="bClave" class="primario" type="submit">Guardar</button>
  </form>
- <p class="nota" id="ecoClave">Se guarda sólo en este navegador. Te la pasa quien te mandó esta página; en el celular y en la compu se carga una vez en cada uno. Si un día dice «falta cargarla», volvé a pegarla.</p>
+ <p class="nota" id="ecoClave">Se guarda sólo en este navegador. Te la pasa quien te mandó esta página; en el celular y en la compu se carga una vez en cada uno. Si un día la página te vuelve a pedir la clave, pegala de nuevo.</p>
  <p class="nota">Las fotos y los PDF se mandan a Anthropic para leerlos, y cada lectura cuesta unos centavos de dólar por matrícula. Lo que lee la máquina hay que compararlo con la matrícula.</p>
 </details>
 
@@ -196,6 +198,7 @@ body[data-vista="foto"] #camara,body[data-vista="foto"] #soltar,body[data-vista=
  <button id="bFoto" class="primario grande" type="button">Sacar foto de la matrícula</button>
  <p class="nota" id="consejoFoto">Una foto por hoja, con buena luz y la hoja entera.</p>
  <div><button id="bGaleria" class="enlace oculto" type="button">Elegir del celular (fotos o PDF)</button></div>
+ <div><button id="bVolver" class="enlace oculto" type="button">Ver lo leído</button></div>
  <input id="foto" type="file" accept="image/*" capture="environment" hidden>
  <input id="fotosGaleria" type="file" accept="image/*" multiple hidden>
  <div id="bandeja" class="bandeja oculto">
@@ -203,6 +206,7 @@ body[data-vista="foto"] #camara,body[data-vista="foto"] #soltar,body[data-vista=
   <p class="pregunta" id="preguntaHoja">¿La matrícula sigue atrás o en otra hoja?</p>
   <div class="fila">
    <button id="bOtraHoja" type="button">Sí, sacar otra hoja</button>
+   <button id="bOtraGaleria" class="enlace oculto" type="button">Sí, elegirla del celular</button>
    <button id="bLeerFotos" class="primario" type="button">No, leer la matrícula</button>
    <button id="bDescartar" class="enlace" type="button">Descartar las fotos</button>
   </div>
@@ -252,7 +256,7 @@ body[data-vista="foto"] #camara,body[data-vista="foto"] #soltar,body[data-vista=
 
 <div class="otra" id="otra"><button id="bOtra" class="grande" type="button">Leer otra matrícula</button></div>
 
-<footer><button id="bAjustes" class="enlace" type="button">Ajustes</button><br>Versión del 04/11/2026, 11:48 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
+<footer><button id="bAjustes" class="enlace" type="button">Ajustes</button><br>Versión del 04/11/2026, 12:43 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
 </div>
 
 <script src="motor.js"></script>
@@ -270,6 +274,11 @@ let EN_INICIO=false;
 function pintarVista(){
  const v=!leerClave()?"clave":REVISANDO?"foto":FOTOS.length?"bandeja":(ARCHIVOS.length&&!EN_INICIO)?"resultado":"inicio";
  if(document.body.dataset.vista!==v){ document.body.dataset.vista=v; if(v!=="resultado") window.scrollTo(0,0); }
+ /* desde el inicio se puede volver a lo leído, que si no quedaba escondido */
+ const lee=ARCHIVOS.some(a=>a.estado==="leyendo"), err=ARCHIVOS.filter(a=>a.estado==="error").length;
+ $("#bVolver").classList.toggle("oculto",!(v==="inicio"&&ARCHIVOS.length));
+ $("#bVolver").textContent=lee?"Ver la lectura en marcha":err?"Ver lo leído ("+(err===1?"una no se pudo leer":err+" no se pudieron leer")+")":"Ver lo leído";
+ if(!TACTIL) $("#soltarTit").textContent=v==="resultado"?"Arrastrá acá otro PDF o fotos, o hacé clic":"Arrastrá acá el PDF de la matrícula";
 }
 
 /* ════════════ la clave ════════════ */
@@ -309,6 +318,8 @@ $("#formClave").addEventListener("submit",e=>{
  document.body.classList.remove("ajustes");
  pintarClave();
  $("#resumenClave").focus();
+ const fallidas=ARCHIVOS.filter(a=>a.estado==="error"&&a.errorClave);
+ if(fallidas.length){ estado("Clave guardada. Vuelvo a leer lo que había fallado."); fallidas.forEach(a=>leer(a,true)); return; }
  estado(TACTIL?"Clave guardada. Ya podés sacar la foto.":"Clave guardada. Ya podés arrastrar el PDF.");
 });
 
@@ -362,10 +373,10 @@ const TOPE_BASE64=30*1024*1024;   /* el pedido entero no puede pasar de 32 MB */
 const TOPE_IMAGEN=9.5*1024*1024;   /* y cada imagen, de 10 MB en base64 */
 
 /* Un error con un mensaje para ella, en castellano, y el original de la API aparte y chico */
-class ErrorLectura extends Error{ constructor(msg,detalle){ super(msg); this.detalle=detalle||""; } }
+class ErrorLectura extends Error{ constructor(msg,detalle,marcas){ super(msg); this.detalle=detalle||""; Object.assign(this,marcas||{}); } }
 const RED=/Failed to fetch|NetworkError|Load failed|network error|ERR_|terminated/i;
 function mensajeApi(status,tipo,txt,codigo){
- if(status===401||tipo==="authentication_error") return "La clave no anda: puede estar mal pegada o vencida. Pegala de nuevo arriba, en «Clave de la API» (tocá ese renglón para abrirlo); si sigue igual, pedí una nueva a quien te la dio.";
+ if(status===401||tipo==="authentication_error") return "La clave no anda: puede estar mal pegada o vencida. Pegá la nueva en el recuadro de arriba; si sigue igual, pedí una nueva a quien te la dio.";
  if(/anthropic-workspace-id|not scoped to a workspace/i.test(txt)) return "Esta clave no está atada a un espacio de trabajo. Quien maneja la cuenta tiene que crear una nueva adentro del espacio de la página.";
  /* el tope de gasto del espacio o de la cuenta puede volver como 429: no se arregla esperando un minuto */
  if(/spend_limit/i.test(codigo||"")) return "Se llegó al límite de gasto. Avisale a quien maneja la cuenta para que lo suba.";
@@ -422,9 +433,23 @@ async function contenidoDe(archivo){
  if(b64.length>TOPE_BASE64) throw new ErrorLectura("El PDF es demasiado grande para leerlo de una vez (el tope es de unos 22 MB). Partilo en dos.");
  return [{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:"Transcribí las matrículas de este PDF."}];
 }
+/* Si la API deja de dar señales por un minuto y medio (manda un «ping» cada tanto mientras
+   piensa), la lectura se da por trabada: cae en «Probar de nuevo» en vez de dejar la rueda
+   girando para siempre. */
+const VIGIA_MS=window.__vigiaMs||90000;
 async function leerPdf(archivo,alAvanzar,signal){
+ const ctl=new AbortController(); let trabada=false, t=null;
+ const vigilar=()=>{ clearTimeout(t); t=setTimeout(()=>{ trabada=true; ctl.abort(); },VIGIA_MS); };
+ const deAfuera=()=>ctl.abort();
+ if(signal){ if(signal.aborted) ctl.abort(); else signal.addEventListener("abort",deAfuera,{once:true}); }
+ vigilar();
+ try{ return await leerConVigia(archivo,alAvanzar,ctl.signal,vigilar); }
+ catch(e){ if(trabada) throw new ErrorLectura("La lectura se quedó trabada: la conexión dejó de responder. Tocá «Probar de nuevo».","sin respuesta por "+Math.round(VIGIA_MS/1000)+" s"); throw e; }
+ finally{ clearTimeout(t); if(signal) signal.removeEventListener("abort",deAfuera); }
+}
+async function leerConVigia(archivo,alAvanzar,signal,vigilar){
  const clave=leerClave();
- if(!clave) throw new ErrorLectura("Falta la clave de la API. Cargala arriba, en «Clave de la API».");
+ if(!clave) throw new ErrorLectura("Falta la clave de la API: pegala en el recuadro de arriba.","",{clave:true});
  const b64=await contenidoDe(archivo);
  let r=await pedir(clave,b64,true,signal);
  if(r.status===400){
@@ -435,7 +460,7 @@ async function leerPdf(archivo,alAvanzar,signal){
  if(!r.ok){
   let tipo="", txt="", codigo="";
   try{ const j=await r.json(); tipo=j&&j.error&&j.error.type||""; txt=j&&j.error&&j.error.message||""; codigo=j&&j.error&&j.error.details&&j.error.details.error_code||""; }catch(e){}
-  throw new ErrorLectura(mensajeApi(r.status,tipo,txt,codigo),"La API contestó "+r.status+(txt?": "+txt:""));
+  throw new ErrorLectura(mensajeApi(r.status,tipo,txt,codigo),"La API contestó "+r.status+(txt?": "+txt:""),{clave:r.status===401||tipo==="authentication_error"});
  }
  /* el streaming: eventos «event: …» / «data: {…}» separados por una línea en blanco. Si el
     modelo se niega a mitad y entra el respaldo, el respaldo SIGUE desde donde quedó (así lo
@@ -468,6 +493,7 @@ async function leerPdf(archivo,alAvanzar,signal){
  try{
   for(;;){
    const {value,done}=await lector.read();
+   vigilar();
    if(done) break;
    buf+=dec.decode(value,{stream:true}).replace(/\r\n?/g,"\n");
    let k;
@@ -491,8 +517,9 @@ async function leerPdf(archivo,alAvanzar,signal){
  }
  if(!datos) throw new ErrorLectura("La respuesta llegó incompleta. Probá de nuevo.");
  const lista=Array.isArray(datos.matriculas)?datos.matriculas:[];
- if(!lista.length) throw new ErrorLectura(fotos?"No encontré la matrícula en estas fotos. Sacalas de nuevo con «Sacar foto de la matrícula», arriba: con buena luz, la hoja entera y que no salga movida."
-  :"No encontré ninguna matrícula en este PDF.");
+ if(!lista.length) throw new ErrorLectura(!fotos?"No encontré ninguna matrícula en este PDF."
+  :TACTIL?"No encontré la matrícula en estas fotos. Tocá «Sacar las fotos de nuevo»: con buena luz, la hoja entera y que no salga movida."
+  :"No encontré la matrícula en estas fotos. Tocá «Elegir otras fotos», o arrastrá el PDF a la franja de arriba.","",{sinMatricula:fotos});
  let costo=0;
  if(uso.iteraciones&&uso.iteraciones.length){
   for(const it of uso.iteraciones){
@@ -544,7 +571,8 @@ function guardar(ya){
    const tx=db.transaction(ALM,"readwrite");
    const archivos=ARCHIVOS.map(a=>({id:a.id,nombre:a.nombre,huella:a.huella,tipo:a.tipo||"pdf",blob:a.blob,blobs:a.blobs,costo:a.costo||0,
     estado:a.estado==="leyendo"?"error":a.estado,
-    error:a.estado==="leyendo"?"La lectura se interrumpió al cerrar o recargar la página.":a.error||"", detalle:a.detalle||""}));
+    error:a.estado==="leyendo"?"La lectura se interrumpió al cerrar o recargar la página.":a.error||"", detalle:a.detalle||"",
+    errorClave:!!a.errorClave, sinMatricula:!!a.sinMatricula}));
    if(archivos.length) tx.objectStore(ALM).put({archivos,matriculas:vivas()},"ultima");
    else tx.objectStore(ALM).delete("ultima");
    tx.oncomplete=()=>db.close();
@@ -561,9 +589,35 @@ async function recuperar(){
   db.close();
   if(v&&Array.isArray(v.archivos)&&v.archivos.length&&!ARCHIVOS.length){
    ARCHIVOS=v.archivos; MATS=Array.isArray(v.matriculas)?v.matriculas:[]; MATS=vivas();
-   pintarTodo();
    const cortadas=ARCHIVOS.filter(a=>a.estado==="error").length;
-   estado("Se recuperó la última tanda."+(cortadas?" "+(cortadas===1?"Una lectura quedó sin terminar":cortadas+" lecturas quedaron sin terminar")+": tocá «Probar de nuevo».":""));
+   /* en el celular, al abrir otro día, el botón gigante; lo de ayer, en «Ver lo leído». Si quedó
+      una lectura sin terminar, va directo a ella para «Probar de nuevo». */
+   if(TACTIL) EN_INICIO=!cortadas;
+   pintarTodo();
+   if(!TACTIL||cortadas) estado((TACTIL?"":"Se recuperó la última tanda.")+(cortadas?" "+(cortadas===1?"Una lectura quedó sin terminar":cortadas+" lecturas quedaron sin terminar")+": tocá «Probar de nuevo».":""));
+  }
+  await recuperarBandeja();
+ }catch(e){}
+}
+/* La bandeja (las fotos sacadas y todavía no leídas) se guarda apenas cambia: si el teléfono
+   cierra la página al abrir la cámara para la hoja siguiente, al volver siguen ahí. */
+async function guardarBandeja(){
+ try{
+  const db=await abrirDb(), tx=db.transaction(ALM,"readwrite");
+  if(FOTOS.length) tx.objectStore(ALM).put(FOTOS.map(f=>({id:f.id,blob:f.blob,orig:f.orig||null})),"bandeja");
+  else tx.objectStore(ALM).delete("bandeja");
+  tx.oncomplete=()=>db.close();
+ }catch(e){}
+}
+async function recuperarBandeja(){
+ try{
+  const db=await abrirDb();
+  const v=await new Promise((res,rej)=>{ const q=db.transaction(ALM).objectStore(ALM).get("bandeja"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); });
+  db.close();
+  if(Array.isArray(v)&&v.length&&!FOTOS.length){
+   FOTOS=v.filter(x=>x&&x.blob).map(x=>({id:x.id||nuevoId(),blob:x.blob,url:URL.createObjectURL(x.blob),orig:x.orig||null}));
+   pintarBandeja();
+   if(FOTOS.length) estado(FOTOS.length===1?"Volvió la hoja que no habías leído.":"Volvieron las "+FOTOS.length+" hojas que no habías leído.");
   }
  }catch(e){}
 }
@@ -654,11 +708,16 @@ function pintarTodo(){
    a.estado==="listo"?`<button class="chico" data-quitar="${esc(a.id)}" aria-label="Quitar ${esc(a.nombre)}">Quitar</button>`:""}</div>`;
   if(a.estado==="leyendo"){
    const d=document.createElement("div"); d.className="leyendo"; d.dataset.prog=a.id; d.tabIndex=-1;
-   d.textContent=a.progreso||"Leyendo… tarda uno o dos minutos. Dejá esta pantalla abierta hasta que termine.";
+   d.innerHTML=`<span class="txt">${esc(a.progreso||"Leyendo… tarda uno o dos minutos. Dejá esta pantalla abierta hasta que termine.")}</span><br><button class="chico" data-cancelar="${esc(a.id)}">Cancelar</button>`;
    caja.appendChild(d);
   }else if(a.estado==="error"){
    const d=document.createElement("div"); d.className="error"; d.setAttribute("role","alert");
-   d.innerHTML=`<b>No se pudo leer.</b> ${esc(a.error)}${a.detalle?`<span class="detalle">Detalle técnico: ${esc(a.detalle)}</span>`:""}<br><button data-reintentar="${esc(a.id)}">Probar de nuevo</button> <button data-quitar="${esc(a.id)}">Quitar</button>`;
+   /* el botón que corresponde: con la clave mala, pegarla de nuevo (después se relee sola); con
+      fotos sin matrícula, sacarlas de nuevo (reintentar con las mismas se cobra y da lo mismo) */
+   const accion=a.errorClave?`<button class="primario" data-clave="1">Pegar la clave de nuevo</button>`
+    :a.sinMatricula?`<button class="primario" data-rehacer="${esc(a.id)}">${TACTIL?"Sacar las fotos de nuevo":"Elegir otras fotos"}</button>`
+    :`<button data-reintentar="${esc(a.id)}">Probar de nuevo</button>`;
+   d.innerHTML=`<b>No se pudo leer.</b> ${esc(a.error)}${a.detalle?`<span class="detalle">Detalle técnico: ${esc(a.detalle)}</span>`:""}<br>${accion} <button data-quitar="${esc(a.id)}">Quitar</button>`;
    caja.appendChild(d);
   }
   for(const m of mats.filter(m=>m.archivoId===a.id)){
@@ -675,6 +734,7 @@ function pintarTodo(){
  const hay=ARCHIVOS.length>0;
  if(!hay) EN_INICIO=false;
  pintarVista();
+ $("#otra").classList.toggle("oculto",ARCHIVOS.some(a=>a.estado==="leyendo"));
  /* en el celular, mientras sólo se está leyendo, la pantalla muestra la rueda y nada más */
  $("#barra").classList.toggle("oculto",TACTIL?!mats.length:!hay);
  $("#bTodasLetras").disabled=$("#bTodasFiel").disabled=$("#bCompartirTodas").disabled=!mats.length;
@@ -737,7 +797,7 @@ async function copiar(boton,htmlTxt,plano,dicho,{negritas=true,plural=false,pega
  const como=await alPortapapeles(htmlTxt,plano);
  const pegala=pegar||(plural?"Pegalas":"Pegala");
  const msg=!como?"No se pudo copiar. Seleccioná el texto y copialo a mano."
-  :PUEDE_COMPARTIR?dicho+" en este celular, no en la compu. "+(mandar?"Para mandarla a la compu, tocá «Mandar a la compu».":pegala+" en el WhatsApp o el mail que te mandes a la compu.")
+  :TACTIL?dicho+" en este celular, no en la compu. "+(PUEDE_COMPARTIR&&mandar?"Para mandarla a la compu, tocá «Mandar a la compu».":pegala+" en el WhatsApp o el mail que te mandes a la compu (llega sin negritas).")
   :como==="plano"&&negritas?dicho+", sin formato (este navegador no copia negritas). "+pegala+" en Word."
   :dicho+(negritas?" con las negritas":"")+". "+pegala+" en Word.";
  estado(msg);
@@ -770,6 +830,9 @@ $("#lista").addEventListener("click",e=>{
  const b=e.target.closest("button"); const card=e.target.closest(".mat");
  if(b&&b.dataset.reintentar){ const a=ARCHIVOS.find(x=>x.id===b.dataset.reintentar); if(a) leer(a,true); return; }
  if(b&&b.dataset.quitar){ quitar(b.dataset.quitar); return; }
+ if(b&&b.dataset.clave){ abrirAjustesClave(); return; }
+ if(b&&b.dataset.rehacer){ rehacerFotos(b.dataset.rehacer); return; }
+ if(b&&b.dataset.cancelar){ cancelarLectura(b.dataset.cancelar); return; }
  if(!card) return;
  const m=vivas().find(x=>x.id===card.dataset.id); if(!m) return;
  if(!b){ if(e.target.tagName!=="TEXTAREA"&&!e.target.closest("details")) activar(m.id,false); return; }
@@ -820,6 +883,29 @@ function quitar(id){
  ARCHIVOS=ARCHIVOS.filter(x=>x.id!==id); MATS=MATS.filter(m=>m.archivoId!==id); soltarUrl(id);
  pintarTodo(); guardar(true); soltarCandado(); estado("Se sacó «"+a.nombre+"».");
 }
+/* la caja de la clave, abierta arriba, cuando la clave no anduvo */
+function abrirAjustesClave(){
+ document.body.classList.add("ajustes"); $("#cajaClave").open=true; window.scrollTo(0,0);
+ setTimeout(()=>{ try{ $("#clave").focus(); }catch(e){} },50);
+}
+/* fotos que no tenían la matrícula: se sacan y se abre la cámara (o la galería en la compu) */
+function rehacerFotos(id){
+ const a=ARCHIVOS.find(x=>x.id===id); if(!a) return;
+ cortar(a); ARCHIVOS=ARCHIVOS.filter(x=>x!==a); MATS=MATS.filter(m=>m.archivoId!==id); soltarUrl(id);
+ pintarTodo(); guardar(true); estado("");
+ abrirCamara();
+}
+/* cancelar una lectura en marcha: deja de cobrarse; si eran fotos, vuelven a la bandeja */
+function cancelarLectura(id){
+ const a=ARCHIVOS.find(x=>x.id===id); if(!a) return;
+ cortar(a); ARCHIVOS=ARCHIVOS.filter(x=>x!==a); MATS=MATS.filter(m=>m.archivoId!==id); soltarUrl(id);
+ if(a.tipo==="fotos"&&a.blobs&&a.blobs.length){
+  FOTOS=a.blobs.map(b=>({id:nuevoId(),blob:b,url:URL.createObjectURL(b),orig:null})).concat(FOTOS);
+  guardarBandeja();
+ }
+ pintarTodo(); pintarBandeja(); guardar(true); soltarCandado();
+ estado(a.tipo==="fotos"?"Lectura cancelada: las fotos siguen acá.":"Lectura cancelada.");
+}
 /* Al tocar «Leer», la bandeja desaparece y lo de abajo (la zona de los PDF, «Empezar de nuevo»)
    queda bajo el dedo: un segundo toque rápido no cuenta, caiga donde caiga. */
 let tLeer=0;
@@ -859,7 +945,6 @@ function soltarCandado(){
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&ARCHIVOS.some(a=>a.estado==="leyendo")) pedirCandado(); });
 async function leer(a,enfocar){
  pedirCandado();
- EN_INICIO=false;
  cortar(a);
  const ctrl=new AbortController(); a.ctrl=ctrl;
  a.estado="leyendo"; a.error=""; a.detalle=""; a.progreso="";
@@ -870,7 +955,7 @@ async function leer(a,enfocar){
  try{
   r=await leerPdf(a,n=>{
    a.progreso="Leyendo… "+(n===1?"va 1 matrícula.":"van "+n+" matrículas.");
-   const d=document.querySelector(`[data-prog="${a.id}"]`); if(d) d.textContent=a.progreso;
+   const d=document.querySelector(`[data-prog="${a.id}"] .txt`); if(d) d.textContent=a.progreso;
   },ctrl.signal);
  }catch(e){ err=e; }
  /* si mientras tanto se quitó el archivo o se empezó de nuevo, lo que volvió no entra */
@@ -880,9 +965,11 @@ async function leer(a,enfocar){
   a.estado="error";
   a.error=err instanceof ErrorLectura?err.message:RED.test(String(err&&err.message))?"No hay conexión con la API. Revisá internet y probá de nuevo.":"Algo falló al leer. Probá de nuevo.";
   a.detalle=err instanceof ErrorLectura?err.detalle:String(err&&err.message||err);
+  a.errorClave=!!(err&&err.clave); a.sinMatricula=!!(err&&err.sinMatricula);
   estado("No se pudo leer «"+a.nombre+"»: "+a.error);
+  if(a.errorClave) abrirAjustesClave();
  }else{
-  a.estado="listo"; a.costo=r.costo;
+  a.estado="listo"; a.costo=r.costo; a.errorClave=a.sinMatricula=false;
   for(const x of r.matriculas){
    const info={};
    const fiel=limpiar(x.descripcion||"",info);
@@ -914,13 +1001,16 @@ async function entrar(files){
  if(imagenes.length) agregarFotos(imagenes);
  const pdfs=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
  if(!pdfs.length){ if(!imagenes.length) estado("Eso no es un PDF ni una foto."); return; }
+ /* con fotos en la bandeja, un PDF se leería sin que se vea: primero las fotos */
+ if(FOTOS.length||imagenes.length||REVISANDO){ estado("Primero terminá con las fotos: tocá «"+nombreLeer()+"» o «Descartar las fotos», y después elegí el PDF."); return; }
  if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
  const ya=new Set(ARCHIVOS.map(a=>a.huella));
  const repetidos=pdfs.filter(f=>ya.has(huella(f)));
  const nuevos=pdfs.filter(f=>!ya.has(huella(f))).filter((f,i,arr)=>arr.findIndex(g=>huella(g)===huella(f))===i)
   .map(f=>({id:nuevoId(),nombre:f.name,huella:huella(f),blob:f,estado:"leyendo",progreso:"En espera…"}));
  if(repetidos.length) estado((repetidos.length===1?"«"+repetidos[0].name+"» ya está en la lista":"Hay "+repetidos.length+" PDF que ya están en la lista")+": no se vuelve a leer.");
- if(!nuevos.length) return;
+ EN_INICIO=false;
+ if(!nuevos.length){ pintarVista(); return; }
  ARCHIVOS.push(...nuevos);
  pintarTodo(); guardar(true);
  /* de a tres por vez: alcanza y no satura la cuenta. Lo que se quitó mientras esperaba, o
@@ -977,6 +1067,7 @@ function pintarBandeja(){
  $("#fotos").innerHTML=FOTOS.map((f,i)=>`<div class="foto"><img src="${f.url}" alt="Hoja ${i+1}: tocala para recortarla" data-hoja="${f.id}"><span>Hoja ${i+1}</span><button type="button" data-borrar="${f.id}" aria-label="Sacar la hoja ${i+1}">✕</button></div>`).join("");
  $("#bLeerFotos").textContent=TACTIL?(n>1?"No, leer la matrícula ("+n+" hojas)":"No, leer la matrícula"):(n>1?"Leer esta matrícula ("+n+" hojas)":"Leer esta matrícula");
  $("#bOtraHoja").textContent=TACTIL?"Sí, sacar otra hoja":"Agregar otra hoja";
+ $("#bOtraGaleria").classList.toggle("oculto",!TACTIL);
  pintarVista();
 }
 async function agregarFotos(files,deCamara=false){
@@ -989,11 +1080,11 @@ async function agregarFotos(files,deCamara=false){
   try{ const r=await prepararFoto(f); if(r.chica) chicas++; FOTOS.push({id:nuevoId(),blob:r.blob,url:URL.createObjectURL(r.blob),orig:f}); }
   catch(e){ mal++; }
  }
- pintarBandeja();
+ pintarBandeja(); guardarBandeja();
  if(mal) estado(mal===1?"Una foto no se pudo abrir: probá sacarla de nuevo.":mal+" fotos no se pudieron abrir: probá sacarlas de nuevo.");
  else if(chicas) estado((chicas===1?"Esta foto tiene poca resolución":"Hay "+chicas+" fotos con poca resolución")+(deCamara?"":" (pasa con las que llegan por WhatsApp)")+" y la letra chica se puede leer mal. "
-  +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «Leer esta matrícula» igual."
-   :"Mejor sacarle la foto desde el celular, o que te la manden como documento; si no, tocá «Leer esta matrícula» igual."));
+  +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «"+nombreLeer()+"» igual."
+   :"Mejor sacarle la foto desde el celular, o que te la manden como documento; si no, tocá «"+nombreLeer()+"» igual."));
  /* en el celular la bandeja ya pregunta si falta otra hoja: no hace falta decirlo dos veces */
  else estado(TACTIL?"":FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, agregala también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
 }
@@ -1057,9 +1148,9 @@ async function usarFoto(rect){
  if(R.idx>=0&&FOTOS[R.idx]){ URL.revokeObjectURL(FOTOS[R.idx].url); FOTOS[R.idx]={...nueva,id:FOTOS[R.idx].id}; }
  else FOTOS.push(nueva);
  cerrarRevisar();
- pintarBandeja();
+ pintarBandeja(); guardarBandeja();
  if(r.chica&&!rect) estado("Esta foto tiene poca resolución"+(DE_CAMARA?"":" (pasa con las que llegan por WhatsApp)")+" y la letra chica se puede leer mal. "
-  +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «No, leer la matrícula» igual.":"Mejor sacarle la foto desde el celular; si no, tocá «Leer esta matrícula» igual."));
+  +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «"+nombreLeer()+"» igual.":"Mejor sacarle la foto desde el celular; si no, tocá «"+nombreLeer()+"» igual."));
  else estado(TACTIL?"":FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, agregala también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
 }
 $("#bUsar").addEventListener("click",()=>{
@@ -1073,8 +1164,10 @@ $("#bListoRecorte").addEventListener("click",()=>{
  if(!W||!H) return;
  usarFoto({x:Math.round(MARCO.x*W),y:Math.round(MARCO.y*H),w:Math.max(1,Math.round(MARCO.w*W)),h:Math.max(1,Math.round(MARCO.h*H))});
 });
-$("#bOtraVez").addEventListener("click",()=>{ cerrarRevisar(); pintarVista(); abrirCamara(); });
+$("#bOtraVez").addEventListener("click",()=>{ const deCam=DE_CAMARA; cerrarRevisar(); pintarVista(); if(deCam||!TACTIL) abrirCamara(); else $("#fotosGaleria").click(); });
 const abrirCamara=()=>$(TACTIL?"#foto":"#fotosGaleria").click();
+/* el nombre del botón de leer como está en pantalla, para que los avisos no nombren otro */
+const nombreLeer=()=>$("#bLeerFotos").textContent.replace(/ \(\d+ hojas\)$/,"");
 $("#bFoto").addEventListener("click",abrirCamara);
 $("#bOtraHoja").addEventListener("click",abrirCamara);
 $("#bGaleria").addEventListener("click",()=>$("#archivos").click());
@@ -1086,27 +1179,32 @@ $("#fotos").addEventListener("click",e=>{
  const f=FOTOS.find(x=>x.id===b.dataset.borrar); if(!f) return;
  if(!confirm("¿Sacar la hoja "+(FOTOS.indexOf(f)+1)+"?")) return;
  URL.revokeObjectURL(f.url); FOTOS=FOTOS.filter(x=>x!==f); pintarBandeja();
+ guardarBandeja();
  estado(FOTOS.length?"Se sacó esa hoja.":"Se sacó la foto.");
 });
 $("#bDescartar").addEventListener("click",()=>{
  if(FOTOS.length>1&&!confirm("Se descartan las "+FOTOS.length+" fotos. ¿Seguro?")) return;
  for(const f of FOTOS) URL.revokeObjectURL(f.url);
- FOTOS=[]; pintarBandeja(); estado("Fotos descartadas.");
+ FOTOS=[]; pintarBandeja(); guardarBandeja(); estado("Fotos descartadas.");
 });
 $("#bLeerFotos").addEventListener("click",()=>{
  if(!FOTOS.length) return;
  if(!leerClave()){ $("#cajaClave").open=true; $("#clave").focus(); estado("Primero cargá la clave de la API."); return; }
  tLeer=Date.now();
- const d=new Date(), hh=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+ const d=new Date(), hh=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":");
  const a={id:nuevoId(),tipo:"fotos",nombre:"Fotos de las "+hh+" ("+(FOTOS.length===1?"1 hoja":FOTOS.length+" hojas")+")",
   huella:"fotos:"+nuevoId(),blobs:FOTOS.map(f=>f.blob),estado:"leyendo",progreso:""};
  for(const f of FOTOS) URL.revokeObjectURL(f.url);
- FOTOS=[]; pintarBandeja();
- ARCHIVOS.push(a); pintarTodo(); guardar(true);
+ /* la lectura nueva va arriba de todo, y la pantalla va a ella aunque viniera de «Leer otra» */
+ FOTOS=[]; EN_INICIO=false; guardarBandeja();
+ ARCHIVOS.unshift(a); pintarBandeja(); pintarTodo(); guardar(true);
  const caja=document.querySelector(`[data-archivo="${a.id}"]`); if(caja) caja.scrollIntoView({block:"start",behavior:"smooth"});
  leer(a);
 });
-$("#bOtra").addEventListener("click",()=>{ EN_INICIO=true; pintarVista(); });
+$("#bOtra").addEventListener("click",()=>{ EN_INICIO=true; estado(""); pintarVista(); });
+$("#bVolver").addEventListener("click",()=>{ EN_INICIO=false; estado(""); pintarVista(); });
+/* la otra hoja puede estar en la galería, no sólo en la cámara */
+$("#bOtraGaleria").addEventListener("click",()=>$("#fotosGaleria").click());
 if(TACTIL){
  $("#bFoto").classList.add("gigante");
  $("#bFoto").innerHTML='<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="16" width="52" height="38" rx="8" fill="none" stroke="currentColor" stroke-width="4"/><path d="M22 16l4-7h12l4 7" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="35" r="10" fill="none" stroke="currentColor" stroke-width="4"/></svg>Sacar foto';
