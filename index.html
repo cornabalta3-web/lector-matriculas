@@ -151,6 +151,22 @@ body:not(.tactil) #otra{display:none}
 .otra{margin-top:18px;text-align:center}
 .otra button{width:100%;max-width:420px}
 footer .enlace{font-size:.95rem}
+/* la foto recién sacada: usarla, recortarla o sacarla de nuevo */
+body:not([data-vista="foto"]) #revisar{display:none}
+body[data-vista="foto"] #camara,body[data-vista="foto"] #soltar,body[data-vista="foto"] #barra,body[data-vista="foto"] #cuerpo,body[data-vista="foto"] #otra{display:none}
+.revisar{text-align:center}
+.recorte{position:relative;display:inline-block;max-width:100%;margin-top:10px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.recorte img{display:block;max-width:100%;max-height:60vh;background:#888}
+.marco{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);touch-action:none;cursor:move}
+.marco i{position:absolute;width:26px;height:26px;border-radius:50%;background:#fff;border:2px solid var(--accent);touch-action:none}
+.marco i::after{content:"";position:absolute;inset:-12px}
+.marco i[data-esq="nw"]{left:-14px;top:-14px;cursor:nwse-resize}
+.marco i[data-esq="ne"]{right:-14px;top:-14px;cursor:nesw-resize}
+.marco i[data-esq="sw"]{left:-14px;bottom:-14px;cursor:nesw-resize}
+.marco i[data-esq="se"]{right:-14px;bottom:-14px;cursor:nwse-resize}
+.revisar .fila{display:flex;flex-direction:column;align-items:stretch;gap:8px;max-width:420px;margin:14px auto 0}
+.revisar .fila button{min-height:52px;font-size:1.05rem}
+.foto img{cursor:pointer}
 /* en pantallas táctiles, los botones chicos también tienen el alto de un dedo */
 @media (pointer:coarse){
  button.chico{min-height:44px;padding:.5rem 1rem;font-size:1rem}
@@ -193,6 +209,23 @@ footer .enlace{font-size:.95rem}
  </div>
 </div>
 
+<div class="caja revisar" id="revisar" aria-live="polite">
+ <p class="pregunta" id="revisarTit" style="margin-top:0">¿Se ve bien la hoja entera?</p>
+ <div class="recorte" id="recorte">
+  <img id="revisarImg" alt="La foto que sacaste">
+  <div class="marco oculto" id="marco"><i data-esq="nw"></i><i data-esq="ne"></i><i data-esq="sw"></i><i data-esq="se"></i></div>
+ </div>
+ <div class="fila" id="filaRevisar">
+  <button id="bUsar" class="primario" type="button">Usar esta foto</button>
+  <button id="bRecortar" type="button">Recortar</button>
+  <button id="bOtraVez" class="enlace" type="button">Sacarla de nuevo</button>
+ </div>
+ <div class="fila oculto" id="filaRecorte">
+  <button id="bListoRecorte" class="primario" type="button">Listo</button>
+  <button id="bCancelarRecorte" class="enlace" type="button">Cancelar</button>
+ </div>
+</div>
+
 <div class="soltar" id="soltar" role="button" tabindex="0" aria-label="Elegir los PDF de las matrículas">
  <strong id="soltarTit">Arrastrá acá los PDF de las matrículas</strong><br>
  <span id="soltarSub">o tocá para elegirlos. Pueden ser varios, y un PDF puede traer varias matrículas.</span>
@@ -219,7 +252,7 @@ footer .enlace{font-size:.95rem}
 
 <div class="otra" id="otra"><button id="bOtra" class="grande" type="button">Leer otra matrícula</button></div>
 
-<footer><button id="bAjustes" class="enlace" type="button">Ajustes</button><br>Versión del 04/11/2026 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
+<footer><button id="bAjustes" class="enlace" type="button">Ajustes</button><br>Versión del 04/11/2026, 11:48 · Lo que sale lo escribió una máquina: se compara con la matrícula antes de usarlo.</footer>
 </div>
 
 <script src="motor.js"></script>
@@ -235,7 +268,7 @@ document.body.classList.toggle("tactil",TACTIL);
    resultado, salvo que haya tocado «Leer otra matrícula»; si no, el inicio */
 let EN_INICIO=false;
 function pintarVista(){
- const v=!leerClave()?"clave":FOTOS.length?"bandeja":(ARCHIVOS.length&&!EN_INICIO)?"resultado":"inicio";
+ const v=!leerClave()?"clave":REVISANDO?"foto":FOTOS.length?"bandeja":(ARCHIVOS.length&&!EN_INICIO)?"resultado":"inicio";
  if(document.body.dataset.vista!==v){ document.body.dataset.vista=v; if(v!=="resultado") window.scrollTo(0,0); }
 }
 
@@ -912,19 +945,25 @@ document.addEventListener("drop",e=>{ if(e.dataTransfer&&e.dataTransfer.files.le
    se sacó. */
 const LADO_MAX=2576, PIX_MAX=4784*28*28*0.97;
 let FOTOS=[];
-function prepararFoto(file){
+/* la foto que se está mirando antes de pasarla a la bandeja: {file, url, idx} (idx: la hoja de
+   la bandeja que se vuelve a recortar, o -1 si es nueva) */
+let REVISANDO=null;
+/* El recorte se hace sobre la foto original, antes de achicarla: así lo recortado conserva toda
+   la resolución que aprovecha el modelo. rect va en píxeles de la foto, ya enderezada. */
+function prepararFoto(file,rect){
  return new Promise((res,rej)=>{
   const url=URL.createObjectURL(file), img=new Image();
   img.onload=()=>{
    URL.revokeObjectURL(url);
-   const w=img.naturalWidth, h=img.naturalHeight;
-   if(!w||!h){ rej(new Error("La foto está vacía.")); return; }
-   const k=Math.min(1,LADO_MAX/Math.max(w,h),Math.sqrt(PIX_MAX/(w*h)));
+   const W=img.naturalWidth, H=img.naturalHeight;
+   if(!W||!H){ rej(new Error("La foto está vacía.")); return; }
+   const r=rect||{x:0,y:0,w:W,h:H};
+   const k=Math.min(1,LADO_MAX/Math.max(r.w,r.h),Math.sqrt(PIX_MAX/(r.w*r.h)));
    const c=document.createElement("canvas");
-   c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(h*k));
-   c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+   c.width=Math.max(1,Math.round(r.w*k)); c.height=Math.max(1,Math.round(r.h*k));
+   c.getContext("2d").drawImage(img,r.x,r.y,r.w,r.h,0,0,c.width,c.height);
    /* una foto de menos de 2000 px llegó achicada (WhatsApp en calidad estándar): se avisa */
-   c.toBlob(b=>b?res({blob:b,chica:Math.max(w,h)<2000}):rej(new Error("No se pudo preparar la foto.")),"image/jpeg",0.9);
+   c.toBlob(b=>b?res({blob:b,chica:Math.max(W,H)<2000}):rej(new Error("No se pudo preparar la foto.")),"image/jpeg",0.9);
   };
   img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("Ese archivo no es una foto que el navegador pueda abrir.")); };
   img.src=url;
@@ -935,16 +974,19 @@ function pintarBandeja(){
  $("#bandeja").classList.toggle("oculto",!n);
  $("#bFoto").classList.toggle("oculto",!!n);
  $("#bGaleria").classList.toggle("oculto",!TACTIL||!!n);
- $("#fotos").innerHTML=FOTOS.map((f,i)=>`<div class="foto"><img src="${f.url}" alt="Hoja ${i+1}"><span>Hoja ${i+1}</span><button type="button" data-borrar="${f.id}" aria-label="Sacar la hoja ${i+1}">✕</button></div>`).join("");
+ $("#fotos").innerHTML=FOTOS.map((f,i)=>`<div class="foto"><img src="${f.url}" alt="Hoja ${i+1}: tocala para recortarla" data-hoja="${f.id}"><span>Hoja ${i+1}</span><button type="button" data-borrar="${f.id}" aria-label="Sacar la hoja ${i+1}">✕</button></div>`).join("");
  $("#bLeerFotos").textContent=TACTIL?(n>1?"No, leer la matrícula ("+n+" hojas)":"No, leer la matrícula"):(n>1?"Leer esta matrícula ("+n+" hojas)":"Leer esta matrícula");
  $("#bOtraHoja").textContent=TACTIL?"Sí, sacar otra hoja":"Agregar otra hoja";
  pintarVista();
 }
 async function agregarFotos(files,deCamara=false){
- estado(files.length===1?"Preparando la foto…":"Preparando las fotos…");
+ /* una sola foto (la de la cámara, o una elegida) se mira antes: usarla, recortarla o sacarla
+    de nuevo. Varias juntas van directo a la bandeja; tocando una se puede recortar igual. */
+ if(files.length===1){ revisar(files[0],-1,deCamara); return; }
+ estado("Preparando las fotos…");
  let mal=0, chicas=0;
  for(const f of files){
-  try{ const r=await prepararFoto(f); if(r.chica) chicas++; FOTOS.push({id:nuevoId(),blob:r.blob,url:URL.createObjectURL(r.blob)}); }
+  try{ const r=await prepararFoto(f); if(r.chica) chicas++; FOTOS.push({id:nuevoId(),blob:r.blob,url:URL.createObjectURL(r.blob),orig:f}); }
   catch(e){ mal++; }
  }
  pintarBandeja();
@@ -955,12 +997,91 @@ async function agregarFotos(files,deCamara=false){
  /* en el celular la bandeja ya pregunta si falta otra hoja: no hace falta decirlo dos veces */
  else estado(TACTIL?"":FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, agregala también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
 }
+/* ════════════ mirar la foto y recortarla ════════════ */
+let MARCO={x:.05,y:.05,w:.9,h:.9}, ARRASTRE=null, DE_CAMARA=false;
+function revisar(file,idx,deCamara){
+ cerrarRevisar();
+ const url=URL.createObjectURL(file);
+ REVISANDO={file,url,idx}; DE_CAMARA=deCamara;
+ const im=$("#revisarImg");
+ im.onerror=()=>{ cerrarRevisar(); estado("Ese archivo no es una foto que el navegador pueda abrir."); };
+ im.src=url;
+ modoRecorte(false);
+ $("#bOtraVez").classList.toggle("oculto",idx>=0);
+ $("#bUsar").textContent=idx>=0?"Dejarla como está":"Usar esta foto";
+ $("#revisarTit").textContent=idx>=0?"Hoja "+(idx+1)+": ¿la recortás?":"¿Se ve bien la hoja entera?";
+ estado("");
+ pintarVista();
+}
+function cerrarRevisar(){
+ if(REVISANDO){ URL.revokeObjectURL(REVISANDO.url); REVISANDO=null; }
+ $("#revisarImg").removeAttribute("src"); ARRASTRE=null;
+}
+function modoRecorte(on){
+ $("#marco").classList.toggle("oculto",!on);
+ $("#filaRevisar").classList.toggle("oculto",on);
+ $("#filaRecorte").classList.toggle("oculto",!on);
+ if(on){ MARCO={x:.05,y:.05,w:.9,h:.9}; pintarMarco(); $("#revisarTit").textContent="Mové las esquinas blancas hasta dejar sólo la hoja"; }
+}
+function pintarMarco(){
+ const m=$("#marco").style;
+ m.left=MARCO.x*100+"%"; m.top=MARCO.y*100+"%"; m.width=MARCO.w*100+"%"; m.height=MARCO.h*100+"%";
+}
+const entre=(v,a,b)=>Math.min(b,Math.max(a,v));
+$("#marco").addEventListener("pointerdown",e=>{
+ const caja=$("#revisarImg").getBoundingClientRect(); if(!caja.width||!caja.height) return;
+ ARRASTRE={esq:e.target.dataset.esq||"mover",x0:e.clientX,y0:e.clientY,m:{...MARCO},w:caja.width,h:caja.height};
+ try{ $("#marco").setPointerCapture(e.pointerId); }catch(er){}
+ e.preventDefault();
+});
+$("#marco").addEventListener("pointermove",e=>{
+ if(!ARRASTRE) return;
+ const dx=(e.clientX-ARRASTRE.x0)/ARRASTRE.w, dy=(e.clientY-ARRASTRE.y0)/ARRASTRE.h, MIN=0.08;
+ let {x,y,w,h}=ARRASTRE.m; const q=ARRASTRE.esq;
+ if(q==="mover"){ x=entre(x+dx,0,1-w); y=entre(y+dy,0,1-h); }
+ else{
+  if(q.includes("w")){ const nx=entre(x+dx,0,x+w-MIN); w+=x-nx; x=nx; }
+  if(q.includes("e")) w=entre(w+dx,MIN,1-x);
+  if(q.includes("n")){ const ny=entre(y+dy,0,y+h-MIN); h+=y-ny; y=ny; }
+  if(q.includes("s")) h=entre(h+dy,MIN,1-y);
+ }
+ MARCO={x,y,w,h}; pintarMarco();
+});
+["pointerup","pointercancel"].forEach(t=>$("#marco").addEventListener(t,()=>{ ARRASTRE=null; }));
+async function usarFoto(rect){
+ const R=REVISANDO; if(!R) return;
+ estado("Preparando la foto…");
+ let r; try{ r=await prepararFoto(R.file,rect); }catch(e){ cerrarRevisar(); pintarVista(); estado("Esa foto no se pudo abrir: probá sacarla de nuevo."); return; }
+ if(REVISANDO!==R) return;
+ const nueva={id:nuevoId(),blob:r.blob,url:URL.createObjectURL(r.blob),orig:R.file};
+ if(R.idx>=0&&FOTOS[R.idx]){ URL.revokeObjectURL(FOTOS[R.idx].url); FOTOS[R.idx]={...nueva,id:FOTOS[R.idx].id}; }
+ else FOTOS.push(nueva);
+ cerrarRevisar();
+ pintarBandeja();
+ if(r.chica&&!rect) estado("Esta foto tiene poca resolución"+(DE_CAMARA?"":" (pasa con las que llegan por WhatsApp)")+" y la letra chica se puede leer mal. "
+  +(TACTIL?"Si tenés la matrícula a mano, sacala con la ✕ y sacale una foto nueva; si no, tocá «No, leer la matrícula» igual.":"Mejor sacarle la foto desde el celular; si no, tocá «Leer esta matrícula» igual."));
+ else estado(TACTIL?"":FOTOS.length===1?"Foto lista. Si la matrícula sigue atrás o en otra hoja, agregala también; si no, tocá «Leer esta matrícula».":"Van "+FOTOS.length+" hojas. Cuando estén todas, tocá «Leer esta matrícula».");
+}
+$("#bUsar").addEventListener("click",()=>{
+ if(REVISANDO&&REVISANDO.idx>=0){ cerrarRevisar(); pintarBandeja(); return; }   /* dejarla como está */
+ usarFoto(null);
+});
+$("#bRecortar").addEventListener("click",()=>modoRecorte(true));
+$("#bCancelarRecorte").addEventListener("click",()=>{ modoRecorte(false); $("#revisarTit").textContent=REVISANDO&&REVISANDO.idx>=0?"Hoja "+(REVISANDO.idx+1)+": ¿la recortás?":"¿Se ve bien la hoja entera?"; });
+$("#bListoRecorte").addEventListener("click",()=>{
+ const im=$("#revisarImg"), W=im.naturalWidth, H=im.naturalHeight;
+ if(!W||!H) return;
+ usarFoto({x:Math.round(MARCO.x*W),y:Math.round(MARCO.y*H),w:Math.max(1,Math.round(MARCO.w*W)),h:Math.max(1,Math.round(MARCO.h*H))});
+});
+$("#bOtraVez").addEventListener("click",()=>{ cerrarRevisar(); pintarVista(); abrirCamara(); });
 const abrirCamara=()=>$(TACTIL?"#foto":"#fotosGaleria").click();
 $("#bFoto").addEventListener("click",abrirCamara);
 $("#bOtraHoja").addEventListener("click",abrirCamara);
 $("#bGaleria").addEventListener("click",()=>$("#archivos").click());
 ["#foto","#fotosGaleria"].forEach(sel=>$(sel).addEventListener("change",e=>{ const f=[...(e.target.files||[])]; e.target.value=""; if(f.length) agregarFotos(f,e.target.id==="foto"); }));
 $("#fotos").addEventListener("click",e=>{
+ const im=e.target.closest("[data-hoja]");
+ if(im){ const i=FOTOS.findIndex(x=>x.id===im.dataset.hoja); if(i>=0&&FOTOS[i].orig) revisar(FOTOS[i].orig,i,false); return; }
  const b=e.target.closest("[data-borrar]"); if(!b) return;
  const f=FOTOS.find(x=>x.id===b.dataset.borrar); if(!f) return;
  if(!confirm("¿Sacar la hoja "+(FOTOS.indexOf(f)+1)+"?")) return;

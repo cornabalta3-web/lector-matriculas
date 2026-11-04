@@ -87,6 +87,10 @@ navegador, igual que en el DDJJ, el rogador y minuta-social del SIGEC.
   botón, y la fiel y los otros datos plegados en el celular; abajo, «Leer otra matrícula»). La
   clave y lo que cuesta quedan en «Ajustes», en el pie. **Lo de mandar por WhatsApp es para
   después** (04/11).
+- **Después de sacar la foto: usarla, recortarla o sacarla de nuevo** (Baltasar, 04/11). Una sola
+  foto pasa por la vista **foto**; «Recortar» muestra un marco con cuatro esquinas. El recorte se
+  aplica sobre la foto original, antes de achicarla, así conserva toda la resolución. Tocando una
+  miniatura de la bandeja se vuelve a abrir para recortarla.
   La foto se achica justo al tope que aprovecha el modelo (2576 px de lado largo, 4784 tokens)
   y no se comprime de más: la documentación avisa que la compresión fuerte arruina el texto.
 - **El PDF al lado** del texto para comparar, en pantallas anchas.

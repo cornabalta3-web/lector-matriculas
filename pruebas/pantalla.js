@@ -389,18 +389,41 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok(await page.evaluate(()=>localStorage.getItem("lector_matriculas_clave"))===CLAVE_PRUEBA,"con el mensaje entero, guarda sólo la clave");
    ok((await page.textContent("#ecoClave")).includes("termina en …xxxx"),"y dice en qué termina");
    ok((await page.getAttribute("#foto","capture"))==="environment","abre la cámara de atrás");
+   /* después de la cámara, la foto se mira: usarla, recortarla o sacarla de nuevo */
+   const enRevisar=()=>page.waitForFunction(()=>document.body.dataset.vista==="foto"&&document.querySelector("#revisarImg").naturalWidth>0);
    await page.setInputFiles("#foto",FOTOS[0]);
+   await enRevisar();
+   ok(await page.locator("#bUsar").isVisible()&&await page.locator("#bRecortar").isVisible()&&await page.locator("#bOtraVez").isVisible()&&await page.locator("#bFoto").isHidden(),"después de sacarla, la foto grande con «Usar», «Recortar» y «Sacarla de nuevo»");
+   if(CAPTURAS) await page.screenshot({path:path.join(CAPTURAS,"celular-revisar.png"),fullPage:false});
+   ok(pedidos.length===0,"mirar la foto no manda nada");
+   await page.click("#bUsar");
    await page.waitForSelector(".foto");
-   ok(await page.locator("#bandeja").isVisible()&&await page.locator("#bFoto").isHidden(),"la foto queda en la bandeja");
+   ok(await page.locator("#bandeja").isVisible()&&await page.locator("#bFoto").isHidden(),"«Usar esta foto» la deja en la bandeja");
    await page.setInputFiles("#foto",FOTOS[1]);
+   await enRevisar(); await page.click("#bUsar");
    await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
    ok((await page.textContent("#bLeerFotos")).includes("2 hojas"),"con dos hojas, «No, leer la matrícula (2 hojas)»");
    ok(await vista()==="bandeja"&&await page.locator("#preguntaHoja").isVisible()&&await page.locator("#bFoto").isHidden(),"la bandeja pregunta si sigue en otra hoja, sin el botón de la cámara");
    page.once("dialog",d=>d.accept());
    await page.locator(".foto [data-borrar]").nth(1).click();
    ok(await page.locator(".foto").count()===1,"se puede sacar una hoja de la bandeja, preguntando antes");
+   /* la segunda, recortada: la esquina de arriba a la derecha, hasta la mitad */
    await page.setInputFiles("#foto",FOTOS[1]);
+   await enRevisar();
+   await page.click("#bRecortar");
+   ok(await page.locator("#marco").isVisible()&&await page.locator("#bListoRecorte").isVisible(),"«Recortar» muestra el marco con las esquinas y «Listo»");
+   const esq=await page.locator('#marco [data-esq="ne"]').boundingBox(), caja=await page.locator("#revisarImg").boundingBox();
+   await page.mouse.move(esq.x+esq.width/2,esq.y+esq.height/2); await page.mouse.down();
+   await page.mouse.move(esq.x+esq.width/2-caja.width*0.5,esq.y+esq.height/2,{steps:8}); await page.mouse.up();
+   if(CAPTURAS) await page.screenshot({path:path.join(CAPTURAS,"celular-recorte.png"),fullPage:false});
+   await page.click("#bListoRecorte");
    await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
+   /* tocar una miniatura la vuelve a abrir, y «Dejarla como está» vuelve a la bandeja */
+   await page.locator(".foto img").first().click();
+   await enRevisar();
+   ok((await page.textContent("#revisarTit")).includes("Hoja 1")&&await page.locator("#bOtraVez").isHidden(),"tocar una miniatura la vuelve a abrir para recortarla");
+   await page.click("#bUsar");
+   ok(await vista()==="bandeja"&&(await page.locator(".foto").count())===2,"y «Dejarla como está» vuelve a la bandeja sin cambiar nada");
    ok(pedidos.length===0,"no se manda nada hasta tocar «Leer»");
    if(CAPTURAS) await page.screenshot({path:path.join(CAPTURAS,"celular-bandeja.png"),fullPage:false});
    let dialogos=0; page.on("dialog",d=>{ dialogos++; d.dismiss(); });
@@ -416,6 +439,8 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    const dims=await page.evaluate(async d=>{ const im=new Image(); im.src="data:image/jpeg;base64,"+d; await im.decode(); return [im.naturalWidth,im.naturalHeight]; },c[1].source.data);
    const tokens=Math.ceil(dims[0]/28)*Math.ceil(dims[1]/28);
    ok(Math.max(...dims)<=2576&&tokens<=4784&&tokens>4000,`la foto se achica justo al tope que aprovecha el modelo (${dims.join("x")}, ${tokens} tokens)`);
+   const dims2=await page.evaluate(async d=>{ const im=new Image(); im.src="data:image/jpeg;base64,"+d; await im.decode(); return [im.naturalWidth,im.naturalHeight]; },c[3].source.data);
+   ok(dims2[1]>dims2[0]&&dims2[1]>=2000,`la recortada va recortada y con toda la resolución de la original (${dims2.join("x")})`);
    ok((await page.locator(".mat .sub").first().textContent()).includes("foto 1"),"la tarjeta dice de qué foto salió");
    ok(await page.locator("#bandeja").isHidden()&&(await page.locator(".foto").count())===0,"la bandeja queda vacía para la próxima");
    ok(JSON.stringify(await page.evaluate(()=>window.__candado))==='["pedido","suelto"]',"la pantalla queda prendida mientras lee, y se suelta al terminar");
@@ -456,9 +481,13 @@ const apiBien=async route=>route.fulfill({status:200,headers:{...CORS,"content-t
    ok((await page.textContent("#bFoto")).includes("Agregar fotos"),"en la compu el botón dice «Agregar fotos»");
    ok(await page.evaluate(()=>!!(document.querySelector("#soltar").compareDocumentPosition(document.querySelector("#camara"))&Node.DOCUMENT_POSITION_FOLLOWING)),"en la compu, el lugar del PDF va primero");
    await page.setInputFiles("#archivos",FOTOS[0]);
+   await page.waitForFunction(()=>document.body.dataset.vista==="foto"&&document.querySelector("#revisarImg").naturalWidth>0);
+   await page.click("#bUsar");
    await page.waitForSelector(".foto");
    ok(pedidos.length===0,"una foto arrastrada va a la bandeja, no se lee sola");
    await page.setInputFiles("#fotosGaleria",FOTOS[1]);
+   await page.waitForFunction(()=>document.body.dataset.vista==="foto"&&document.querySelector("#revisarImg").naturalWidth>0);
+   await page.click("#bUsar");
    await page.waitForFunction(()=>document.querySelectorAll(".foto").length===2);
    await page.click("#bLeerFotos");
    await page.waitForSelector(".mat",{timeout:10000});
